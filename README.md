@@ -11,7 +11,7 @@
 
 Windows or antivirus software may show a warning or block when running Finesse. These warnings are false positives for Finesse.
 
-If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoMuch/Finesse/releases) and Windows blocks it from running, try to either **Unblock** it by right-click the file → **Properties** → **General** → check **Unblock** → **Apply** → **OK**, then try again.
+If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoMuch/Finesse/releases) and Windows blocks it from running, try to **Unblock** it by right-click the file → **Properties** → **General** → check **Unblock** → **Apply** → **OK**, then try again.
 
 **Don't disable your antivirus.** If it detects or quarantines a specific threat, ask for help in our Discord before proceeding.
 
