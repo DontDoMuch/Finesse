@@ -17,7 +17,7 @@ If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoM
 
 ## Help & Support
 
-Need help or having trouble with an installation? Our [**BYOF (Bring Your Own Finesse) Discord**](https://discord.gg/J2wBRCXzN7) is where we handle questions and troubleshooting.
+Need help or having trouble with an installation? Our [**BYOF (Bring Your Own Finesse) Discord**](https://discord.com/invite/J2wBRCXzN7) is where we handle questions and troubleshooting.
 
 ---
 
