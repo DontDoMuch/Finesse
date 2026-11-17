@@ -3,7 +3,7 @@
 **Finesse makes it easy to install newer AMD graphics drivers unofficially** on these Lenovo handhelds:
 
 - **Legion Go 1** — Z1 Extreme
-- **Legion Go S** — Z1 Extreme *(physical testing in progress)*
+- **Legion Go S** — Z1 Extreme
 - **Legion Go 2** — Z2 Extreme
 
 ## Installation
