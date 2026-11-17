@@ -9,7 +9,7 @@
 
 ## Windows Security
 
-Windows or antivirus software may show a warning when running an unofficial installer. These warnings are false positives.
+Windows or antivirus software may show a warning or block when running Finesse. These warnings are false positives for Finesse.
 
 If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoMuch/Finesse/releases) and Windows blocks it from running, try to either **Unblock** it by right-click the file → **Properties** → **General** → check **Unblock** → **Apply** → **OK**, then try again.
 
