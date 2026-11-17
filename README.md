@@ -5,6 +5,7 @@
 1. **Use a supported handheld:** Legion Go 1 (Z1 Extreme), Legion Go S (Z1 Extreme), or Legion Go 2 (Z2 Extreme).
 2. **Install the prerequisite:** [Microsoft Visual C++ Redistributable (x64)](https://aka.ms/vc14/vc_redist.x64.exe).
 3. **Install Finesse:** Download **Finesse.exe** from [Releases](https://github.com/DontDoMuch/Finesse/releases), run it, and follow the on-screen instructions.
+4. Expect about 10 minutes for the install and a one time reboot
 
 ## Help & Support
 
