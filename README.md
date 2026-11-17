@@ -7,6 +7,14 @@
 3. **Install Finesse:** Download **Finesse.exe** from [Releases](https://github.com/DontDoMuch/Finesse/releases), run it, and follow the on-screen instructions.
 4. Expect about 10 minutes for the install and a one time reboot
 
+## Windows Security
+
+Windows or antivirus software may show a warning when running an unofficial installer. Some warnings may be false positives.
+
+If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoMuch/Finesse/releases) and Windows offers an **Unblock** option, right-click the file → **Properties** → **General** → check **Unblock** → **Apply** → **OK**, then try again.
+
+**Don't disable your antivirus.** If it detects or quarantines a specific threat, ask for help in our Discord before proceeding.
+
 ## Help & Support
 
 Need help or having trouble with an installation? Our [**BYOF (Bring Your Own Finesse) Discord**](https://discord.gg/J2wBRCXzN7) is where we handle questions and troubleshooting.
