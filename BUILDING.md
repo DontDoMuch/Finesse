@@ -57,7 +57,7 @@ M195 also includes a source-first stager that checks an exact original 194-file 
 dotnet build Source/tools/Finesse.SourceFirstVerifier/Finesse.SourceFirstVerifier.csproj -c Release
 ```
 
-It requires an original AMD extraction, an authorized profile policy, and the authoritative pinned 194-file SHA-256 manifest. The full public manifest and production GUI wiring are **not yet available**. See [source-first staging](docs/M195-SOURCE-FIRST-STAGING.md). Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
+It requires an authentic original AMD extraction and authorized profile policy. The 194-file **filename/hash manifest is now public** at [Source/contracts/releases/amd-26.11.1-original-194.sha256](Source/contracts/releases/amd-26.11.1-original-194.sha256); the production GUI wiring remains incomplete. See [source-first staging](docs/M195-SOURCE-FIRST-STAGING.md). Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
 
 With the original AMD source DAT legitimately extracted, independent reviewers can reproduce the exact Go 1/Go S/Go 2 SHA-256 digests. See [offline DAT verification](docs/M195-OFFLINE-DAT-VERIFICATION.md).
 
