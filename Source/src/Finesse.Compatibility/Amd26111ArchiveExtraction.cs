@@ -52,12 +52,12 @@ public static class Amd26111ArchiveExtraction
             throw new InvalidDataException("M195_7ZR_PINNED_BYTES_FAILED");
 
         string workspace = Path.GetFullPath(newWorkspace);
-        string installer = Path.GetFullPath(exactOfficialAmdInstaller);
         if (Directory.Exists(workspace) || File.Exists(workspace))
             throw new IOException("M195_WORKSPACE_ALREADY_EXISTS");
-        if (IsWithin(workspace, Path.GetDirectoryName(installer)!) ||
-            IsWithin(workspace, Path.GetDirectoryName(extractor)!))
-            throw new InvalidDataException("M195_WORKSPACE_MUST_BE_SEPARATE_FROM_TOOLS_AND_INSTALLER");
+        // The fresh workspace may share a parent folder with the official
+        // installer or tool (for example Downloads/Finesse). New filenames,
+        // the no-overwrite rule, and the isolated temporary folder prevent
+        // modification of those existing inputs.
         string parent = Path.GetDirectoryName(workspace) ??
             throw new InvalidDataException("M195_NO_WORKSPACE_PARENT");
         RequireNoReparseAncestors(parent);
@@ -200,15 +200,6 @@ public static class Amd26111ArchiveExtraction
             FileShare.Read, 1024 * 1024,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
         return Convert.ToHexString(await SHA256.HashDataAsync(stream, ct));
-    }
-
-    private static bool IsWithin(string candidate, string root)
-    {
-        string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
-        string fullCandidate = Path.GetFullPath(candidate);
-        return fullCandidate.Equals(fullRoot, StringComparison.OrdinalIgnoreCase) ||
-            fullCandidate.StartsWith(fullRoot + Path.DirectorySeparatorChar,
-                StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RequireNoReparseAncestors(string path)
