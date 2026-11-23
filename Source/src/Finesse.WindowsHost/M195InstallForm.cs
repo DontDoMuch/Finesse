@@ -264,7 +264,7 @@ internal sealed class M195InstallForm : Form
             _headline.Text = "Installation could not finish";
             _headline.ForeColor = Warn;
             _status.Text = "Finesse stopped because a required verification did not complete. The original driver recovery and diagnostic results are recorded where available.";
-            _action.Text = "Review installation status";
+            _action.Text = "Installation stopped";
             string? destination = _sessionRoot;
             if (!string.IsNullOrWhiteSpace(destination))
             {
