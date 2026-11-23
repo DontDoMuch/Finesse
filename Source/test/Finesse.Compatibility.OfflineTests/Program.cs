@@ -1427,6 +1427,24 @@ Reject(() => M195AmdSettings26111.BuildMsiexecArguments(
     true, "ccc-next64.msi", "no-verbose-extension"),
     "MSI argument builder requires a fresh verbose .log destination");
 
+
+// Native Windows MSI ProductState / related upgrade family calls are READ-ONLY
+// on a hosted Windows runner; no MSI package, uninstall, or restart is invoked.
+if (OperatingSystem.IsWindows())
+{
+    IReadOnlyList<M195AmdSettings26111.RegisteredProduct> nativeRelatedAmd =
+        M195WindowsAmdSettingsMsiIdentity.EnumerateRelatedDesktopProducts();
+    Check(nativeRelatedAmd.Count < 100 &&
+          nativeRelatedAmd.All(item => item.Installed &&
+              item.RelatedByExactUpgradeCode &&
+              Guid.TryParseExact(item.Code, "B", out _)),
+        "Windows msi.dll enumerates only native installed related MSI product identities");
+    bool exactTargetPresent =
+        M195WindowsAmdSettingsMsiIdentity.ExactTargetInstalled();
+    Console.WriteLine("M195_NATIVE_TARGET_AMD_SETTINGS_INSTALLED=" + exactTargetPresent);
+    Check(true, "read-only native MsiQueryProductState called for exact 26.11.1 target");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
