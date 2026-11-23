@@ -1580,7 +1580,8 @@ var m195Full = new M195WindowsFullLifecycleActions(
     new M195WindowsFullLifecycleActions.Settings(
         m195FullPrepSettings, "PINNED_SIGNTOOL.EXE",
         "PINNED_7Z_RELEASE.EXE", "UNCREATED_M195_FULL_SOFTWARE",
-        "UNCREATED_M195_FULL_MSI_LOGS", "UNCREATED_M195_FULL_ROLLBACK"));
+        "UNCREATED_M195_FULL_MSI_LOGS", "UNCREATED_M195_FULL_ROLLBACK",
+        "UNCREATED_M195_FULL_SCOPED_CLEANUP"));
 bool m195FullBootBlocked = false;
 try { _ = await m195Full.ReadPreRebootBootIdentityAsync(CancellationToken.None); }
 catch (InvalidOperationException) { m195FullBootBlocked = true; }
@@ -1645,6 +1646,50 @@ finally
     if (Directory.Exists(m195ZipRoot))
         Directory.Delete(m195ZipRoot, recursive: true);
 }
+
+
+// Frozen M192 scoped inactive-package selection. This is a text-only
+// classifier fixture; it never executes PnPUtil or mutates a certificate.
+foreach (var selected in new[] {
+    (Profile: HandheldProfiles.Go1, Device: "15BF",
+     Subsystem: "381217AA", Section: "Go1"),
+    (Profile: HandheldProfiles.GoS, Device: "15BF",
+     Subsystem: "380C17AA", Section: "GoS"),
+    (Profile: HandheldProfiles.Go2, Device: "150E",
+     Subsystem: "381C17AA", Section: "Go2")
+})
+{
+    string candidateInf = "[Version]\nClass=Display\n" +
+        "[LegionGo_Finesse_" + selected.Section + "_Policy]\n" +
+        "PCI\\VEN_1002&DEV_" + selected.Device +
+        "&SUBSYS_" + selected.Subsystem + "\n";
+    Check(M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf, "oem777.inf", "oem12.inf", selected.Profile),
+        "M192 selects exact inactive Finesse display policy for " + selected.Profile.Id);
+    Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf, "oem12.inf", "oem12.inf", selected.Profile),
+        "M192 never selects active backup oem INF for " + selected.Profile.Id);
+    Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf.Replace("Class=Display", "Class=Extension"),
+        "oem777.inf", "oem12.inf", selected.Profile),
+        "M192 never selects Lenovo OEM extension class " + selected.Profile.Id);
+    Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf.Replace(selected.Subsystem, "00000000"),
+        "oem777.inf", "oem12.inf", selected.Profile),
+        "M192 refuses a different Lenovo subsystem " + selected.Profile.Id);
+    Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf.Replace("LegionGo_Finesse_", "LegionGo_OEM_"),
+        "oem777.inf", "oem12.inf", selected.Profile),
+        "M192 refuses non-Finesse display packages " + selected.Profile.Id);
+    Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+        candidateInf, "amd-installed.inf", "oem12.inf", selected.Profile),
+        "M192 refuses non-oem driver package names " + selected.Profile.Id);
+}
+Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
+    "[Version]\nClass=Display\n[LegionGo_Finesse_Go1_Policy]\n" +
+    "DEV_15BF\nSUBSYS_381217AA\n",
+    "oem71.inf", "oem3.inf", HandheldProfiles.Go2),
+    "M192 Go1 stale package cannot be misclassified as Go2");
 
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
