@@ -158,9 +158,20 @@ public static class OfficialAmd26111Downloader
                     _ = await OfficialAmdInstallerVerifier.Verify26111Async(
                         localFile, cancellationToken);
                     Directory.Move(temp, destination);
-                    return await OfficialAmdInstallerVerifier.Verify26111Async(
-                        Path.Combine(destination, contract.InstallerFileName),
-                        cancellationToken);
+                    try
+                    {
+                        return await OfficialAmdInstallerVerifier.Verify26111Async(
+                            Path.Combine(destination, contract.InstallerFileName),
+                            cancellationToken);
+                    }
+                    catch
+                    {
+                        // Destination was created entirely by this attempt.
+                        // Never leave an unverified 'completed' download folder.
+                        if (Directory.Exists(destination))
+                            Directory.Delete(destination, recursive: true);
+                        throw;
+                    }
                 }
                 if (retryOtherReferer)
                     continue;
