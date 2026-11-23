@@ -12,7 +12,7 @@ Code, tests, hardware evidence with personal details removed, build reproducibil
 
 - Preserve frozen **M194**; all changes go into a new branch or version.
 - Keep the README's ordinary end-user installation steps prominent. Move technical instructions to supporting documents.
-- Use globally discoverable `dotnet` and repository-relative paths, never a maintainer-specific SDK location.
+- Use the **system-installed Microsoft .NET 10 SDK** exposed through `dotnet` on `PATH`, and repository-relative source paths; do not use a project-local/portable SDK, SDK auto-download, or a maintainer-specific installation directory. The delivered EXE remains self-contained for end users.
 - For each release, verify the original AMD installer authenticity and rederive the INF and DAT transformations; do not reuse pinned 26.11.1 DAT header bytes.
 - Retain the exact compatible hardware routing and per-profile policies.
 - Keep the complete signing, **14/14 two-catalog coverage**, driver backup, scoped silent cleanup, verified AMD Software installation before **one planned reboot**, first postboot GPU observation, and rollback.
