@@ -162,8 +162,9 @@ public static class AmdInfSourceRebuilder
         if (Count(source, header) != 1)
             throw new InvalidDataException("AMD_INF_MISSING_OR_DUPLICATED_FAMILY_SECTION: " + section);
         int start = source.IndexOf(header, StringComparison.Ordinal) + header.Length;
-        Match next = Regex.Match(source, @"(?m)^\[[^\]\r\n]+\]\r\n", RegexOptions.None,
-            TimeSpan.FromSeconds(2), start);
+        var headers = new Regex(@"^\[[^\]\r\n]+\]\r\n", RegexOptions.Multiline,
+            TimeSpan.FromSeconds(2));
+        Match next = headers.Match(source, start);
         int end = next.Success ? next.Index : source.Length;
         string body = source[start..end].TrimEnd('\r', '\n');
         return body.Length == 0 ? "" : body + "\r\n";
