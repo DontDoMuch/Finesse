@@ -302,19 +302,47 @@ public static class M195WindowsNativeBind
             if (i != 5)
                 await Task.Delay(900, CancellationToken.None);
         }
-        bool healthy = accepted && observed is not null &&
-            observed.Profile == plan.Profile &&
-            string.Equals(observed.Display.InstanceId, plan.InstanceId,
-                StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(observed.Display.PublishedInf, plan.OriginalPublishedInf,
-                StringComparison.OrdinalIgnoreCase) &&
-            observed.Display.Version == plan.OriginalVersion &&
-            observed.Display.ProblemCode == 0;
+        string status = ClassifyRecovery(accepted, restart, plan, observed);
+        bool healthy = status == "RECOVERY_VERIFIED_CODE0_BASELINE";
         return new(accepted, code, restart,
             observed?.Display.PublishedInf, observed?.Display.Version,
-            observed?.Display.ProblemCode, healthy,
-            healthy ? "RECOVERY_VERIFIED_CODE0_BASELINE" :
-                "RECOVERY_UNVERIFIED_REQUIRES_REVIEW");
+            observed?.Display.ProblemCode, healthy, status);
+    }
+
+    /// <summary>
+    /// Frozen M180 rollback-state evaluator, with a separate pending-restart
+    /// disposition. Even exact Code 0 before an OS-required restart does NOT
+    /// establish completed recovery.
+    /// </summary>
+    public static string ClassifyRecovery(
+        bool apiAccepted, bool restartRequired, BindPlan plan,
+        M195WindowsGpuInventory.ExactGpu? observed)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!apiAccepted)
+            return "RECOVERY_BIND_API_FAILED";
+        if (observed is null)
+            return restartRequired
+                ? "RECOVERY_PENDING_RESTART_UNVERIFIED"
+                : "RECOVERY_DEVICE_NOT_OBSERVED";
+        if (observed.Profile != plan.Profile ||
+            !string.Equals(observed.Display.InstanceId, plan.InstanceId,
+                StringComparison.OrdinalIgnoreCase))
+            return "RECOVERY_DEVICE_ID_MISMATCH";
+        if (!string.Equals(observed.Display.PublishedInf,
+                plan.OriginalPublishedInf, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(observed.Display.Version, plan.OriginalVersion,
+                StringComparison.Ordinal))
+            return restartRequired
+                ? "RECOVERY_PENDING_RESTART_UNVERIFIED"
+                : "RECOVERY_BASELINE_MISMATCH";
+        if (observed.Display.ProblemCode != 0)
+            return restartRequired
+                ? "RECOVERY_PENDING_RESTART_UNVERIFIED"
+                : "RECOVERY_DEVICE_PROBLEM";
+        if (restartRequired)
+            return "RECOVERY_PENDING_RESTART_UNVERIFIED";
+        return "RECOVERY_VERIFIED_CODE0_BASELINE";
     }
 
     private static async Task WriteAsync(string path, object receipt)
