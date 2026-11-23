@@ -565,12 +565,14 @@ Check(!badSoftware.Calls.Contains("RegisterPostboot") &&
       badSoftware.Calls.Contains("PrebootRollback"),
       "software failure restores original driver and never schedules reboot");
 
-var badTrust = new FakeM195Lifecycle { DualTrustedCount = 13 };
-Reject(() => L.RunPrebootAsync(badTrust).GetAwaiter().GetResult(),
-    "reject fewer than 14/14 critical dual-catalog trust files");
-Check(!badTrust.Calls.Contains("Software") && !badTrust.Calls.Contains("Reboot") &&
-      badTrust.Calls.Contains("PrebootRollback"),
-      "dual trust failure cannot silently proceed to AMD Software or reboot");
+var incompleteM191Evidence = new FakeM195Lifecycle { DualTrustedCount = 13 };
+L.PendingPostboot incompleteM191Pending = await L.RunPrebootAsync(incompleteM191Evidence);
+Check(incompleteM191Pending.ExpectedDriverVersion ==
+          OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion &&
+      incompleteM191Evidence.Calls.Contains("Software") &&
+      incompleteM191Evidence.Calls.Contains("Reboot") &&
+      !incompleteM191Evidence.Calls.Contains("PrebootRollback"),
+    "M194 optional M191 catalog evidence does not introduce an unconditional install blocker");
 
 var badBaseline = new FakeM195Lifecycle { UseGo2 = true, VerifiedBaseline = false };
 Reject(() => L.RunPrebootAsync(badBaseline).GetAwaiter().GetResult(),
