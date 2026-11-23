@@ -76,6 +76,29 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
                     }, CancellationToken.None);
             }
             catch { /* preserve original failure */ }
+            // Once a real reboot and the immutable first snapshot exist,
+            // failure must not leave the elevated postboot task running at
+            // every future logon. A same-boot launch keeps the task because
+            // no valid postboot transaction has occurred yet.
+            if (native._first is not null && native._firstFile is not null &&
+                M195PostbootTicketContract.IsNewBoot(
+                    state.Pending.RegisteredBootIdentity, native._first.BootIdentity))
+            {
+                try { await native.UnregisterTaskAsync(CancellationToken.None); }
+                catch (Exception cleanupError)
+                {
+                    try
+                    {
+                        await M195WindowsPostbootRegistration.WriteNewAsync(
+                            Path.Combine(reports, "M195-Postboot-FailedCleanupWarning.json"), new {
+                                Schema = "Finesse.M195.PostbootFailedCleanupWarning.v1",
+                                TaskName = state.TaskName,
+                                Failure = cleanupError.ToString()
+                            }, CancellationToken.None);
+                    }
+                    catch { /* retain the original transaction failure */ }
+                }
+            }
             throw;
         }
         // The one-shot task is removed AFTER the original first observation,
