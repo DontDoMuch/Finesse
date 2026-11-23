@@ -47,7 +47,7 @@ jobs:
             $prefix='c/bin/10.0.28000.0/x86/'
             $entries=@($archive.Entries | Where-Object {
               $_.FullName.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -and
-              $_.Name -match '(?i)^(Inf2Cat|Microsoft\.UniversalStore\.HardwareWorkflow|Microsoft\.Kits\.Logger)'
+              $_.Name -match '(?i)^(Inf2Cat|Microsoft\.UniversalStore\.HardwareWorkflow|Microsoft\.Kits\.Logger|WindowsProtectedFiles)'
             })
             Write-Host "M195_PINNED_INF2CAT_MEMBER_COUNT=$($entries.Count)"
             foreach ($entry in $entries) {
