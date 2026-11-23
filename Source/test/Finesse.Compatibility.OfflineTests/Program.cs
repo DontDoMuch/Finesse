@@ -1145,6 +1145,52 @@ foreach (HandheldProfile testProfile in new[] {
         "reject different assigned GPU instance " + testProfile.Id);
 }
 
+
+// Frozen M179 NewDev bind migration: policy tests are PURE and do not call
+// UpdateDriverForPlugAndPlayDevicesW on GitHub-hosted Windows.
+foreach (HandheldProfile profile in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    var display = DisplayFor(profile, instance: "PCI\\M195_BIND_GPU");
+    var gpu = new M195WindowsGpuInventory.ExactGpu(display, profile);
+    var device = new L.Device(display.InstanceId, profile.HardwareId, profile);
+    var original = new L.AssignedDriver(display.PublishedInf, display.Version,
+        0, true, "healthy source baseline");
+    string infText = "\"AMD Radeon\" = " + profile.InstallSection + ", " +
+        profile.HardwareId + "\r\n";
+    var plan = M195WindowsNativeBind.RequirePlan(device, original, gpu,
+        "oem91.inf", profile.HardwareId, device.InstanceId, infText);
+    Check(plan.Profile == profile && plan.HardwareId == profile.HardwareId &&
+          plan.StagedPublishedInf == "oem91.inf" &&
+          plan.OriginalPublishedInf == "oem42.inf",
+        "native NewDev plan selects the exact hardware profile and staged published INF " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu, "oem91.inf",
+        profile.HardwareId + "&BAD", device.InstanceId, infText),
+        "native NewDev plan rejects modified stage hardware ID " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu, "oem91.inf",
+        profile.HardwareId, "PCI\\WRONG_INSTANCE", infText),
+        "native NewDev plan rejects changed GPU instance " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu with { Display = display with { PublishedInf = "oem3.inf" } },
+        "oem91.inf", profile.HardwareId, device.InstanceId, infText),
+        "native NewDev plan rejects original active INF drift " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu with { Display = display with { Version = "different" } },
+        "oem91.inf", profile.HardwareId, device.InstanceId, infText),
+        "native NewDev plan rejects original active version drift " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu, "../oem91.inf", profile.HardwareId,
+        device.InstanceId, infText),
+        "native NewDev plan rejects invalid published INF path " + profile.Id);
+    Reject(() => M195WindowsNativeBind.RequirePlan(
+        device, original, gpu, "oem91.inf", profile.HardwareId,
+        device.InstanceId, infText.Replace(profile.InstallSection, "wrong_section")),
+        "native NewDev plan rejects wrong INF install section " + profile.Id);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
