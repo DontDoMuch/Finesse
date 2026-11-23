@@ -245,4 +245,123 @@ Reject(() => Amd26111CandidateRecipe.Build(
         HandheldProfiles.Go1),
     "reject synthetic untrusted DAT/INF from pinned candidate path");
 
+
+// Vendor-independent 194-file source-first staging test. No AMD files.
+string demoRoot = Path.Combine(Path.GetTempPath(),
+    "Finesse-M195-SourceFirst-" + Guid.NewGuid().ToString("N"));
+try
+{
+    string originals = Path.Combine(demoRoot, "OriginalAmdExtracted");
+    Directory.CreateDirectory(originals);
+    var fakeRows = new List<AmdSourceFileProof>();
+    byte[] fakeInf = System.Text.Encoding.ASCII.GetBytes("OFFICIAL-INF-SYNTHETIC");
+    byte[] fakeDat = System.Text.Encoding.ASCII.GetBytes("OFFICIAL-DAT-SYNTHETIC");
+    byte[] fakeKernel = System.Text.Encoding.ASCII.GetBytes("OFFICIAL-KERNEL-SYNTHETIC");
+    static string FakeHash(byte[] data) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data));
+    void SourceFile(string relative, byte[] data)
+    {
+        string p = Path.Combine(originals,
+            relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+        File.WriteAllBytes(p, data);
+        fakeRows.Add(new AmdSourceFileProof(relative, FakeHash(data)));
+    }
+    SourceFile("u0206030.inf", fakeInf);
+    SourceFile("B026778/amdgcf.dat", fakeDat);
+    SourceFile("B026778/amdkmdag.sys", fakeKernel);
+    for (int i = 0; i < 191; i++)
+        SourceFile($"B026778/synthetic-{i:D3}.bin",
+            System.Text.Encoding.ASCII.GetBytes($"TEST-FILE-{i:D3}"));
+    File.WriteAllText(Path.Combine(originals, "u0206030.cat"),
+        "SYNTHETIC-ORIGINAL-CATALOG");
+    Check(fakeRows.Count == 194, "synthetic source inventory contains 194 original files");
+
+    var sourceContract = officialContract with
+    {
+        OriginalInfSha256 = FakeHash(fakeInf),
+        OriginalDatSha256 = FakeHash(fakeDat),
+        OriginalKernelSha256 = FakeHash(fakeKernel)
+    };
+    string manifest = string.Concat(fakeRows
+        .OrderByDescending(x => x.Relative, StringComparer.OrdinalIgnoreCase)
+        .Select(x => x.Sha256 + "  " + x.Relative + "\n"));
+    string canonical = string.Concat(fakeRows
+        .OrderBy(x => x.Relative, StringComparer.OrdinalIgnoreCase)
+        .Select(x => x.Sha256 + "  " + x.Relative + "\n"));
+    string pinnedManifest = FakeHash(System.Text.Encoding.ASCII.GetBytes(canonical));
+    AmdVerifiedSourceInventory parsed =
+        Amd26111SourceInventory.ParseAndVerify(manifest, sourceContract, pinnedManifest);
+    Check(parsed.Entries.Count == 194 && parsed.CanonicalSha256 == pinnedManifest,
+        "194 original source hashes verified independent of source manifest row order");
+
+    byte[] fakeCandidateInf = System.Text.Encoding.ASCII.GetBytes("LOCAL-PATCHED-INF");
+    byte[] fakeCandidateDat = System.Text.Encoding.ASCII.GetBytes("LOCAL-PATCHED-DAT");
+    var fakeCandidate = new Amd26111CandidateRecipe.VerifiedCandidate(
+        HandheldProfiles.Go1, fakeCandidateInf, fakeCandidateDat,
+        FakeHash(fakeCandidateInf), FakeHash(fakeCandidateDat),
+        Amd26111CandidateRecipe.ReleaseMarker);
+    string expectedPrepared = Amd26111SourceInventory.CandidateManifestSha256(
+        parsed, fakeCandidate);
+
+    string outDir = Path.Combine(demoRoot, "Prepared");
+    var preparedStage = await AmdSourceFirstStager.StageAsync(
+        originals, outDir, parsed, fakeCandidate, expectedPrepared);
+    Check(preparedStage.VerifiedFiles == 194 &&
+          !preparedStage.SignedOrInstallable &&
+          File.Exists(preparedStage.EvidencePath),
+          "original-source 194-file preparation completed UNSIGNED");
+    Check(Directory.EnumerateFiles(preparedStage.PackageRoot, "*",
+              SearchOption.AllDirectories).Count() == 194 &&
+          !File.Exists(Path.Combine(preparedStage.PackageRoot, "u0206030.cat")),
+          "194 candidate files prepared; original main AMD catalog not installed as new main catalog");
+    Check(File.ReadAllBytes(Path.Combine(preparedStage.PackageRoot, "u0206030.inf"))
+              .SequenceEqual(fakeCandidateInf) &&
+          File.ReadAllBytes(Path.Combine(preparedStage.PackageRoot, "B026778", "amdgcf.dat"))
+              .SequenceEqual(fakeCandidateDat),
+          "only candidate INF and DAT replaced after source verification");
+    Check(File.ReadAllText(preparedStage.PreservedOriginalCatalog) ==
+          "SYNTHETIC-ORIGINAL-CATALOG" &&
+          File.ReadAllBytes(Path.Combine(originals, "u0206030.inf")).SequenceEqual(fakeInf),
+          "original catalog separately preserved and original source never modified");
+    try
+    {
+        await AmdSourceFirstStager.StageAsync(
+            originals, outDir, parsed, fakeCandidate, expectedPrepared);
+        throw new InvalidOperationException("FAIL: accepted pre-existing output directory");
+    }
+    catch (IOException)
+    {
+        Check(true, "refuse output overwrite");
+    }
+    var forgedCandidate = fakeCandidate with { InfBytes = fakeInf };
+    Reject(() => AmdSourceFirstStager.StageAsync(originals,
+        Path.Combine(demoRoot, "forged"), parsed, forgedCandidate,
+        expectedPrepared).GetAwaiter().GetResult(),
+        "reject candidate byte/hash mismatch before staging");
+    Reject(() => AmdSourceFirstStager.StageAsync(originals,
+        Path.Combine(originals, "hidden-output"), parsed, fakeCandidate,
+        expectedPrepared).GetAwaiter().GetResult(),
+        "reject writing staged candidate inside original AMD source");
+    Reject(() => AmdSourceFirstStager.StageAsync(originals,
+        Path.Combine(demoRoot, "wrong-manifest"), parsed, fakeCandidate,
+        new string('0', 64)).GetAwaiter().GetResult(),
+        "reject unapproved candidate inventory SHA-256");
+    File.WriteAllText(Path.Combine(originals, "B026778", "amdkmdag.sys"),
+        "TAMPERED-ORIGINAL-KERNEL");
+    Reject(() => AmdSourceFirstStager.StageAsync(originals,
+        Path.Combine(demoRoot, "tampered"), parsed, fakeCandidate,
+        expectedPrepared).GetAwaiter().GetResult(),
+        "reject modified original kernel before staging");
+    Reject(() => Amd26111SourceInventory.ValidateRelative("../escape"),
+        "reject source manifest path traversal");
+    Reject(() => Amd26111SourceInventory.ValidateRelative("CON.dll"),
+        "reject reserved Windows device name");
+}
+finally
+{
+    if (Directory.Exists(demoRoot))
+        Directory.Delete(demoRoot, recursive: true);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
