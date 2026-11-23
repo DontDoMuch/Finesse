@@ -1088,6 +1088,35 @@ Reject(() => M195DualCatalogCoverage.Evaluate(FullDualSnapshot(
         ? dualVerifiedMembers[1] : m).ToArray())),
     "refuse duplicate critical-file evidence masquerading as 14/14");
 
+
+// Actual M191 SetupAPI driver-store mapping. This is read-only; unlike a
+// same-name local package, a published OEM INF must resolve via Windows.
+if (OperatingSystem.IsWindows())
+{
+    string infDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF");
+    string[] oemInfs = Directory.GetFiles(infDirectory, "oem*.inf",
+        SearchOption.TopDirectoryOnly).Where(p =>
+        System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(p),
+            @"\Aoem[0-9]+\.inf\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        .ToArray();
+    if (oemInfs.Length > 0)
+    {
+        var locatedDriver = M195WindowsDriverStoreLocator.Locate(
+            Path.GetFileName(oemInfs[0]));
+        Check(File.Exists(locatedDriver.DriverStoreInfPath) &&
+              locatedDriver.DriverStoreInfPath.Contains(
+                  "FileRepository", StringComparison.OrdinalIgnoreCase) &&
+              locatedDriver.InfSha256.Length == 64,
+              "native SetupGetInfDriverStoreLocation resolves an actually published OEM INF");
+        Console.WriteLine("M195_DRIVERSTORE_MAPPED_OEM=" + locatedDriver.PublishedInf);
+    }
+    else
+        Console.WriteLine("M195_DRIVERSTORE_POSITIVE_MAPPING_SKIPPED_NO_OEM_INF_ON_RUNNER");
+    Reject(() => M195WindowsDriverStoreLocator.Locate("not-an-oem.inf"),
+        "driverstore locator refuses invalid published INF before invoking native SetupAPI");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
