@@ -35,6 +35,17 @@
 - [ ] Integrate source acquisition, WinVerifyTrust, authentic extraction and source-first stage into the **actual GUI**; do not claim the offline CLI is the GUI
 - [ ] Run complete M194 lifecycle/regression tests in clean Windows CI and physical Secure Boot-on testing before release
 
+## M195 live-lifecycle ordering (current status)
+
+- [x] Inspect actual M194 `M182InstallLifecycleWorkflow`, `M80Recipe`, `M80Pipeline`, M149 catalog generation, and M175/M179 signing and binding dependencies
+- [x] Commit source-only `M195LifecycleSequence` coordinator preserving the 12 ordered steps and first-postboot-before-recovery semantics
+- [x] Test recovery baseline, Code 43, 14/14 dual trust, AMD Software failure before restart, exactly one reboot request, and actual boot-identity change with synthetic adapters
+- [x] Compile and test the public Windows `WinVerifyTrust` interop against genuine Microsoft embedded-signed executables
+- [x] Add pinned Microsoft Inf2Cat offline catalog generator with 194-file proof and unsigned CMS verification
+- [ ] Execute actual pinned Inf2Cat against an authenticated 26.11.1 staged AMD package and verify the generated CAT
+- [ ] Implement real GUI-specific Windows lifecycle adapters; source-only interfaces are not a production integration
+- [ ] Preserve real M191/M192 14/14 catalog trust, baseline rollback, scoped cleanup, AMD Settings MSI, and one planned reboot in that live integration
+
 ## Compatibility and lifecycle (do not silently omit)
 
 - [ ] Exact Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme hardware routing; reject unsupported variants
