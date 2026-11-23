@@ -116,10 +116,10 @@ internal static class M195PostbootEvidenceExporter
                 "Downloads", "Finesse", "Reports"));
         RejectReparseAncestors(reports);
         Directory.CreateDirectory(reports);
-        string name = "Finesse-M195-Postboot-" + transactionId;
-        string finalZip = Path.Combine(reports, name + ".zip");
-        string shaFile = Path.Combine(reports, name + ".zip.sha256");
-        string temporary = Path.Combine(reports, "." + name +
+        string archiveBaseName = "Finesse-M195-Postboot-" + transactionId;
+        string finalZip = Path.Combine(reports, archiveBaseName + ".zip");
+        string shaFile = Path.Combine(reports, archiveBaseName + ".zip.sha256");
+        string temporary = Path.Combine(reports, "." + archiveBaseName +
             "-" + Guid.NewGuid().ToString("N") + ".tmp");
         if (File.Exists(finalZip) || File.Exists(shaFile))
             throw new IOException("M195_EXPORT_TRANSACTION_ALREADY_PUBLISHED");
