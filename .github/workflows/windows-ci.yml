@@ -1,0 +1,110 @@
+# M195: two distinct claims. The vendor-free offline compatibility core can pass
+# while the full public installer source gate remains explicitly incomplete.
+name: M195 offline compatibility checks (NOT the full installer)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [m195-public-build-ci-foundation]
+    paths:
+      - 'build.ps1'
+      - 'verify-public-source.ps1'
+      - '.gitignore'
+      - 'global.json'
+      - 'Source/**'
+      - '.github/workflows/windows-ci.yml'
+  pull_request:
+    paths:
+      - 'build.ps1'
+      - 'verify-public-source.ps1'
+      - '.gitignore'
+      - 'global.json'
+      - 'Source/**'
+      - '.github/workflows/windows-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility-offline:
+    name: Offline compatibility core (NOT installer validation)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository (pinned)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10 SDK on Windows runner (pinned)
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
+      - name: Audit public repository for proprietary driver assets and private keys
+        shell: powershell
+        run: .\verify-public-source.ps1
+      - name: Confirm public AMD original manifest is present (metadata only)
+        shell: powershell
+        run: |
+          $manifest = 'Source/contracts/releases/amd-26.11.1-original-194.sha256'
+          if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            throw 'Required public 194-file source inventory missing.'
+          }
+          $rows = @(Get-Content -LiteralPath $manifest)
+          if ($rows.Count -ne 194) {
+            throw "Expected 194 original AMD name/hash entries, got $($rows.Count)."
+          }
+          Write-Host 'M195_PUBLIC_ORIGINAL_SOURCE_METADATA_194_PRESENT'
+      - name: Run vendor-independent profile and DAT payload tests
+        shell: powershell
+        run: |
+          dotnet --version
+          if ($LASTEXITCODE -ne 0) { throw "System dotnet unavailable" }
+          dotnet run --project "Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Offline compatibility tests failed" }
+          dotnet build "Source/tools/Finesse.DatVerifier/Finesse.DatVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Offline DAT verifier tool failed to compile" }
+          dotnet build "Source/tools/Finesse.CandidateVerifier/Finesse.CandidateVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Combined offline INF+DAT candidate verifier failed to compile" }
+          dotnet build "Source/tools/Finesse.SourceFirstVerifier/Finesse.SourceFirstVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "194-file original-source staging verifier failed to compile" }
+          dotnet build "Source/tools/Finesse.OfficialSourcePreparation/Finesse.OfficialSourcePreparation.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Signed official AMD original extraction/preparation CLI did not compile" }
+
+      - name: Compile the new self-contained Finesse.exe (build only, never run)
+        shell: powershell
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'M195-Finesse-Host-BuildOnly'
+          dotnet publish 'Source/src/Finesse.WindowsHost/Finesse.WindowsHost.csproj' --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:PublishTrimmed=false -p:DebugType=None --output $dest
+          if ($LASTEXITCODE -ne 0) { throw 'WinForms Finesse.exe did not compile.' }
+          $exe = Join-Path $dest 'Finesse.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Single-file Finesse.exe was not produced.' }
+          $unexpected = @(Get-ChildItem -LiteralPath $dest -File -Recurse | Where-Object { $_.FullName -ne $exe -and $_.Extension -ne '.pdb' })
+          if ($unexpected.Count -ne 0) { throw "Unexpected unpackaged runtime files: $($unexpected.Name -join ', ')" }
+          $size = (Get-Item -LiteralPath $exe).Length
+          if ($size -lt 10000000) { throw "Output is not self-contained: bytes=$size" }
+          $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          Write-Host "M195_SINGLE_FILE_WINFORMS_BUILD_PASS bytes=$size sha256=$sha"
+          Write-Host 'M195_SOURCE_BUILD_NO_LIVE_DRIVER_INSTALL=TRUE'
+
+  public-installer-source-gate:
+    # This MUST NOT make every offline-source commit look like a failed CI
+    # release build. Run explicitly for a full-installer source readiness audit.
+    # When the source is absent it deliberately fails, never returns false green.
+    if: github.event_name == 'workflow_dispatch'
+    name: Full installer source gate (manual; expected BLOCKED until complete)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository (pinned)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10 SDK on Windows runner (pinned)
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
+      - name: Run the same system-dotnet build/check script as developers
+        shell: powershell
+        run: .\build.ps1 -Configuration Release -Ci
+
+# No publish, release, signing or attestation until full public source gates pass.

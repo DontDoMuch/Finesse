@@ -9,7 +9,7 @@
 
 ## Windows Security
 
-Windows or antivirus software may show a warning or block when running Finesse. These warnings are false positives for Finesse.
+Windows or antivirus software may show a warning or block when running Finesse. Some warnings may be false positives, but a warning alone does not establish that the file is safe. Download only from the official repository and verify available release information.
 
 If you downloaded **Finesse.exe** from our [Releases](https://github.com/DontDoMuch/Finesse/releases) and Windows blocks it from running, try to **Unblock** it by right-click the file → **Properties** → **General** → check **Unblock** → **Apply** → **OK**, then try again.
 
@@ -22,3 +22,9 @@ Need help or having trouble with an installation? Our [**BYOF (Bring Your Own Fi
 ---
 
 *Finesse is an independent, unofficial project and is not affiliated with Lenovo or AMD.*
+
+## Development & verification
+
+Interested in the source or how releases will be verified? See [Building from source](BUILDING.md), [Release verification](VERIFYING.md), and [Contributing](CONTRIBUTING.md).
+
+The complete public source build and GitHub CI attestation pipeline are **in preparation**. Until they are available, we won't describe locally compiled builds as GitHub-verified releases.

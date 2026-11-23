@@ -1,0 +1,146 @@
+name: M195 portable Inf2Cat dependency audit (no GPU changes)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [m195-public-build-ci-foundation]
+    paths:
+      - '.github/workflows/m195-inf2cat-dependency-audit.yml'
+      - 'Source/src/Finesse.Compatibility/M195PinnedToolBootstrap.cs'
+      - 'Source/test/Finesse.Compatibility.OfflineTests/Program.cs'
+
+permissions:
+  contents: read
+
+jobs:
+  inf2cat-toolchain-probe:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - name: Checkout verified Finesse source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
+      - name: Inspect pinned WDK NuGet contents and exercise portable Inf2Cat
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $p = Join-Path $env:RUNNER_TEMP 'M195-WDK-Pinned.nupkg'
+          $url='https://www.nuget.org/api/v2/package/Microsoft.Windows.WDK.x64/10.0.28000.2526'
+          $client = [System.Net.Http.HttpClient]::new()
+          try {
+            $client.Timeout=[TimeSpan]::FromMinutes(6)
+            $data=$client.GetByteArrayAsync($url).GetAwaiter().GetResult()
+            [System.IO.File]::WriteAllBytes($p,$data)
+          } finally { $client.Dispose() }
+          $expected='63C939FB5A79295BF40E941DB592681272219B04EDFF095FE2F3D123E5579A90'
+          $actual=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
+          if ($actual -ne $expected) { throw "WDK NuGet checksum mismatch: $actual" }
+          $folder=Join-Path $env:RUNNER_TEMP 'M195-Inf2Cat-Portable'
+          New-Item -ItemType Directory -Path $folder -Force | Out-Null
+          $archive=[System.IO.Compression.ZipFile]::OpenRead($p)
+          try {
+            $prefix='c/bin/10.0.28000.0/x86/'
+            $entries=@($archive.Entries | Where-Object {
+              $_.FullName.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase) -and
+              $_.Name -match '(?i)^(Inf2Cat|Microsoft\.UniversalStore\.HardwareWorkflow|Microsoft\.Kits\.Logger|WindowsProtectedFiles)'
+            })
+            Write-Host "M195_PINNED_INF2CAT_MEMBER_COUNT=$($entries.Count)"
+            foreach ($entry in $entries) {
+              $target=Join-Path $folder $entry.Name
+              [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$false)
+              $hash=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+              Write-Host "M195_INF2CAT_MEMBER $($entry.FullName) BYTES=$($entry.Length) SHA256=$hash"
+            }
+          } finally { $archive.Dispose() }
+          $exe=Join-Path $folder 'Inf2Cat.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Inf2Cat exe missing' }
+          $out=Join-Path $folder 'probe.stdout.txt'
+          $err=Join-Path $folder 'probe.stderr.txt'
+          $p0=Start-Process -FilePath $exe -ArgumentList '/?' -PassThru -Wait -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+          Write-Host "M195_INF2CAT_HELP_EXIT=$($p0.ExitCode)"
+          Write-Host 'M195_INF2CAT_HELP_STDOUT_BEGIN'
+          Get-Content -LiteralPath $out -TotalCount 60
+          Write-Host 'M195_INF2CAT_HELP_STDOUT_END'
+          Write-Host 'M195_INF2CAT_HELP_STDERR_BEGIN'
+          Get-Content -LiteralPath $err -TotalCount 40
+          Write-Host 'M195_INF2CAT_HELP_STDERR_END'
+          $message=@(Get-Content -LiteralPath $out,$err -Raw) -join [Environment]::NewLine
+          if ($message -match 'Could not load file or assembly|system cannot find the file specified|FileNotFoundException') { throw 'Portable Inf2Cat has an unresolved dependency' }
+          Write-Host 'M195_PORTABLE_INF2CAT_DEPENDENCY_BOOT_PASS'
+      - name: Run actual Finesse portable tool bootstrap on clean Windows runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Reuse exactly the checksum-verified Microsoft WDK package downloaded
+          # above; let Finesse fetch the remaining pinned prerequisites itself.
+          $src=Join-Path $env:RUNNER_TEMP 'M195-WDK-Pinned.nupkg'
+          $dst=Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\packages\Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
+          Copy-Item -LiteralPath $src -Destination $dst
+          dotnet run --project 'Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj' --configuration Release -- --pinned-tool-runtime-probe
+          if ($LASTEXITCODE -ne 0) { throw "Finesse full portable bootstrap failed: $LASTEXITCODE" }
+          Write-Host 'M195_CLEAN_WINDOWS_REAL_BOOTSTRAP_SMOKE_PASS'
+      - name: Exercise actual portable Inf2Cat on a synthetic non-installing INF package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = Join-Path $env:RUNNER_TEMP 'M195-Inf2Cat-Fixture'
+          New-Item -ItemType Directory -Path $path -Force | Out-Null
+          $inf = @'
+          [Version]
+          Signature="$Windows NT$"
+          Class=Sample
+          ClassGuid={78A1C341-4539-11d3-B88D-00C04FAD5171}
+          Provider=%Manufacturer%
+          DriverVer=11/20/2026,1.0.0.0
+          CatalogFile=finesseprobe.cat
+          [Manufacturer]
+          %Manufacturer%=Models,NTamd64
+          [Models.NTamd64]
+          %Device%=Install,ROOT\FINESSE_CATALOG_PROBE
+          [Install.NT]
+          CopyFiles=CopyProbe
+          [CopyProbe]
+          probe.txt
+          [SourceDisksNames]
+          1=%Disk%,,,
+          [SourceDisksFiles]
+          probe.txt=1
+          [DestinationDirs]
+          CopyProbe=12
+          [Strings]
+          Manufacturer="Finesse Synthetic Tests"
+          Device="Noninstalling Inf2Cat Fixture"
+          Disk="Fixture Disk"
+          '@
+          Set-Content -LiteralPath (Join-Path $path 'finesseprobe.inf') -Value $inf -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $path 'probe.txt') -Value 'synthetic only' -Encoding ascii
+          $inf2cat = Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\extracted-tools\WDK-28000\x86\Inf2Cat.exe'
+          $output = & $inf2cat "/driver:$path" '/os:10_GE_X64' '/verbose' 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host "M195_INF2CAT_SYNTHETIC_EXIT=$exit"
+          Write-Host $output
+          if ($exit -ne 0 -or -not (Test-Path (Join-Path $path 'finesseprobe.cat'))) {
+            throw 'Full pinned Inf2Cat could not create a catalog from synthetic INF'
+          }
+          Write-Host 'M195_PINNED_INF2CAT_SYNTHETIC_CATALOG_PASS'
+      - name: Probe pinned Windows SignTool help on the same clean runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tool = Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\extracted-tools\SDK-28000\x64\signtool.exe'
+          $out = & $tool '/?' 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host "M195_PINNED_SIGNTOOL_HELP_EXIT=$exit"
+          Write-Host ($out.Substring(0,[Math]::Min(1200,$out.Length)))
+          if ($exit -ne 0 -or $out -match 'Could not load file or assembly|The code execution cannot proceed') {
+            throw 'Pinned portable SignTool missing a runtime dependency'
+          }
+          Write-Host 'M195_PINNED_SIGNTOOL_HELP_PASS'
