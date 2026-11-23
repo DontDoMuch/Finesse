@@ -68,6 +68,7 @@ try {
     # A proper public build must retain the proven profile, INF/DAT and lifecycle
     # regression harnesses. Never quietly skip one because its project is missing.
     $requiredHarnesses = @(
+        'Finesse.Compatibility.OfflineTests',
         'M166.ReleaseHarness',
         'M167.HardwareHarness',
         'M169.MsiHarness',
@@ -88,6 +89,14 @@ try {
         Invoke-Dotnet -ArgsToRun @('run', '--project', $harness, '--configuration',
             $Configuration, '--no-launch-profile')
     }
+
+    # Also compile the independently distributable DAT verifier. No proprietary
+    # AMD source assets are shipped and compilation does not alter Windows trust.
+    $datTool = Join-Path $sourceRoot 'tools\Finesse.DatVerifier\Finesse.DatVerifier.csproj'
+    if (-not (Test-Path -LiteralPath $datTool -PathType Leaf)) {
+        throw 'M195_MISSING_OFFLINE_DAT_VERIFIER'
+    }
+    Invoke-Dotnet -ArgsToRun @('build', $datTool, '--configuration', $Configuration)
 
     Write-Host '[M195] Publishing user-facing Windows x64 executable...'
     if (-not (Test-Path -LiteralPath $dist -PathType Container)) {
