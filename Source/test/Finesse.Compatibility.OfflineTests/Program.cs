@@ -222,4 +222,27 @@ foreach (HandheldProfile profile in new[] { HandheldProfiles.Go1, HandheldProfil
         profile, policy), "reject duplicate manufacturer anchor " + profile.Id);
 }
 
+
+var officialContract = OfficialAmd26111SourceContract.VerifiedFrozenM194;
+Check(officialContract.InstallerFileName ==
+      "amd-software-adrenalin-edition-26.11.1-win11-c.exe" &&
+      officialContract.ExactInstallerBytes == 1_780_861_240 &&
+      officialContract.SelectedFileCount == 194,
+      "official 26.11.1 source-only contract matches frozen M194");
+Check(officialContract.OriginalInfSha256 ==
+      "2E1125EB79359D3BAEB283B81868064257C5F1436D8928AC2EC123837DD70C57" &&
+      officialContract.OriginalDatSha256 == Amd26111CandidateRecipe.OriginalDatSha256,
+      "single source-of-truth original AMD INF/DAT hashes");
+Check(!string.IsNullOrWhiteSpace(officialContract.ExpectedSignerName) &&
+      officialContract.RootInInstallerArchive ==
+          "Packages/Drivers/Display/WT6A_INF",
+      "source-only contract includes verifier/extraction facts but no private files");
+Reject(() => Amd26111CandidateRecipe.Build(
+        System.Text.Encoding.Latin1.GetBytes(SyntheticOriginalInf("Phoenix")),
+        cleanOriginal,
+        string.Join("\r\n", Enumerable.Range(0, HandheldProfiles.Go1.ExpectedLenovoPolicyCount)
+            .Select(i => $"HKR,,OfflineFixture{i},%REG_DWORD%,0")),
+        HandheldProfiles.Go1),
+    "reject synthetic untrusted DAT/INF from pinned candidate path");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
