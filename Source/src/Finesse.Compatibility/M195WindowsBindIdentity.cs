@@ -35,7 +35,7 @@ public static class M195WindowsBindIdentity
         // selected profile. Do not search for a partial PCI substring.
         string pattern = @"(?m)^[ \t]*""[^""\r\n]+""[ \t]*=[ \t]*" +
             Regex.Escape(installSection) + @"[ \t]*,[ \t]*" +
-            Regex.Escape(expected) + @"[ \t]*(?:;[^\r\n]*)?$";
+            Regex.Escape(expected) + @"[ \t]*(?:;[^\r\n]*)?\r?$";
         MatchCollection lines = Regex.Matches(candidateInf, pattern,
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(2));
