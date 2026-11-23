@@ -35,6 +35,7 @@ internal sealed class M195InstallForm : Form
     ];
     private bool _busy;
     private string? _sessionRoot;
+    private M195LifecycleSequence.Step? _activeStep;
 
     internal int ResultCode { get; private set; }
 
@@ -197,6 +198,7 @@ internal sealed class M195InstallForm : Form
             return;
         }
         int selected = (int)step - 1;
+        _activeStep = step;
         for (int i = 0; i < _rowLabels.Length; i++)
         {
             _rowLabels[i].Text = (i < selected ? "✓  " :
@@ -223,6 +225,17 @@ internal sealed class M195InstallForm : Form
         _status.Text = text;
     }
 
+    private void UpdateDevice(string model)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => UpdateDevice(model)));
+            return;
+        }
+        _device.Text = model;
+    }
+
     private async Task InstallAsync()
     {
         if (_busy) return;
@@ -236,13 +249,15 @@ internal sealed class M195InstallForm : Form
         try
         {
             var toolsProgress = new Progress<string>(UpdateTool);
+            var deviceProgress = new Progress<string>(UpdateDevice);
             // Native Windows driver operations, MSI and task registration run
             // off the UI thread, using one already-elevated process.
             M195LifecycleSequence.PendingPostboot pending =
                 await Task.Run(async () => {
                     M195WindowsFullLifecycleActions actions =
                         await Program.CreateActionsAsync(
-                            _sessionRoot, toolsProgress, CancellationToken.None);
+                            _sessionRoot, toolsProgress, deviceProgress,
+                            CancellationToken.None);
                     return await M195LifecycleSequence.RunPrebootAsync(
                         actions, UpdateStep, CancellationToken.None);
                 });
@@ -263,27 +278,86 @@ internal sealed class M195InstallForm : Form
             ResultCode = 1;
             _headline.Text = "Installation could not finish";
             _headline.ForeColor = Warn;
-            _status.Text = "Finesse stopped because a required verification did not complete. The original driver recovery and diagnostic results are recorded where available.";
             _action.Text = "Installation stopped";
-            string? destination = _sessionRoot;
-            if (!string.IsNullOrWhiteSpace(destination))
+            string stepName = _activeStep is M195LifecycleSequence.Step stage
+                ? _stepTitles[(int)stage - 1] : "Checking prerequisites";
+            string summary = ex.GetBaseException().Message;
+            string? sessionFolder = _sessionRoot;
+            string? userReport = null;
+            if (!string.IsNullOrWhiteSpace(sessionFolder))
             {
                 try
                 {
-                    Directory.CreateDirectory(destination);
-                    string receipt = Path.Combine(destination,
+                    Directory.CreateDirectory(sessionFolder);
+                    string receipt = Path.Combine(sessionFolder,
                         "M195-Host-InstallationFailure.json");
                     await File.WriteAllTextAsync(receipt, JsonSerializer.Serialize(
                         new {
                             Schema = "Finesse.M195.HostFailure.v1",
                             TimestampUtc = DateTimeOffset.UtcNow,
+                            FailedStep = stepName,
+                            Error = summary,
                             Exception = ex.ToString(),
+                            SessionFolder = sessionFolder,
                             LiveInstallSucceeded = false,
                             RestartConfirmed = false
                         }, new JsonSerializerOptions { WriteIndented = true }));
                 }
-                catch { /* retain on-screen failure without inventing receipt */ }
+                catch { /* display the real error even if disk logging fails */ }
+                try
+                {
+                    // The previous build kept this inside ProgramData without
+                    // showing the location. Create a user-accessible report
+                    // with only diagnostic text, never original AMD binaries.
+                    string reportDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Downloads", "Finesse", "Reports");
+                    Directory.CreateDirectory(reportDir);
+                    string output = Path.Combine(reportDir,
+                        "Finesse-M195-Failed-" + Path.GetFileName(sessionFolder) + ".txt");
+                    var report = new System.Text.StringBuilder();
+                    report.AppendLine("Finesse M195 — failed installation evidence");
+                    report.AppendLine("Timestamp UTC: " + DateTimeOffset.UtcNow.ToString("O"));
+                    report.AppendLine("Failed step: " + stepName);
+                    report.AppendLine("Original session: " + sessionFolder);
+                    report.AppendLine("Error: " + summary);
+                    report.AppendLine();
+                    report.AppendLine("FULL EXCEPTION");
+                    report.AppendLine(ex.ToString());
+                    report.AppendLine();
+
+                    // Inf2Cat logs exist if Microsoft's process actually
+                    // started. Collect only the two exact output filenames;
+                    // do not copy AMD source files, driver packages or keys.
+                    foreach (string diagnostic in new[] {
+                        "M195-Inf2Cat-stdout.txt",
+                        "M195-Inf2Cat-stderr.txt"
+                    })
+                    {
+                        foreach (string file in Directory.EnumerateFiles(
+                            sessionFolder, diagnostic,
+                            SearchOption.AllDirectories).Take(5))
+                        {
+                            report.AppendLine("=== " + file + " ===");
+                            long length = new FileInfo(file).Length;
+                            if (length > 0 && length <= 1_000_000)
+                                report.AppendLine(await File.ReadAllTextAsync(file));
+                            else
+                                report.AppendLine("Diagnostic file empty or exceeds 1MB limit.");
+                        }
+                    }
+                    await File.WriteAllTextAsync(output, report.ToString());
+                    userReport = output;
+                }
+                catch { /* keep the original installation exception visible */ }
             }
+            string shortError = summary.Length > 240
+                ? summary[..240] + "…" : summary;
+            _status.Text = "Stopped at: " + stepName + Environment.NewLine +
+                "Reason: " + shortError + Environment.NewLine +
+                (userReport is null
+                    ? "Original log: " + (sessionFolder ?? "Unavailable")
+                    : "Report: " + userReport);
         }
         finally
         {
