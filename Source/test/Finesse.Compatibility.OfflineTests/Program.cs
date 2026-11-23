@@ -607,11 +607,16 @@ if (OperatingSystem.IsWindows())
     Check(File.Exists(nativeSignedPe),
         "Windows runner has a Microsoft-signed system PowerShell executable");
     var microsoftSignature = OfficialAmdInstallerVerifier.InspectWindowsSignature(nativeSignedPe);
-    Check(microsoftSignature.Trusted &&
-          microsoftSignature.WindowsStatus == 0 &&
-          microsoftSignature.Subject.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) &&
-          !string.IsNullOrWhiteSpace(microsoftSignature.Thumbprint),
-          "actual native WinVerifyTrust accepts signed Microsoft PE and extracts signer");
+    Console.WriteLine("M195_NATIVE_WINTRUST_DIAGNOSTIC Status=0x" +
+        unchecked((uint)microsoftSignature.WindowsStatus).ToString("X8") +
+        " Trusted=" + microsoftSignature.Trusted +
+        " Subject=" + microsoftSignature.Subject +
+        " EmbeddedSignerPresent=" + !string.IsNullOrWhiteSpace(microsoftSignature.Thumbprint));
+    Check(microsoftSignature.Trusted && microsoftSignature.WindowsStatus == 0,
+          "actual WinVerifyTrust accepts Microsoft's native system executable");
+    // An inbox system PE can be catalog-signed rather than embedding a signer.
+    // The AMD-specific gate still requires an embedded AMD signer identity.
+
 }
 
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
