@@ -44,7 +44,30 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
         string reports = Path.Combine(folder, "Reports");
         Directory.CreateDirectory(reports);
         if (File.Exists(Path.Combine(reports, "M195-Postboot-Outcome.json")))
-            throw new InvalidDataException("M195_STEP12_ALREADY_COMPLETED");
+        {
+            // A previous run completed and persisted its outcome. If the
+            // scheduler did not remove the one-shot task, a later logon may
+            // retry TASK CLEANUP ONLY. Never repeat GPU recovery or rewrite
+            // the immutable first observation.
+            var cleanupOnly = new M195WindowsPostbootActions(state, reports);
+            try { await cleanupOnly.UnregisterTaskAsync(CancellationToken.None); }
+            catch (Exception cleanupError)
+            {
+                try
+                {
+                    await M195WindowsPostbootRegistration.WriteNewAsync(
+                        Path.Combine(reports, "M195-Postboot-ReplayCleanup-" +
+                            Guid.NewGuid().ToString("N") + ".json"), new {
+                            Schema = "Finesse.M195.PostbootReplayCleanup.v1",
+                            TaskName = state.TaskName,
+                            Warning = cleanupError.ToString(),
+                            AnyDriverRecoveryAttempted = false
+                        }, CancellationToken.None);
+                }
+                catch { /* do not hide completed-outcome status */ }
+            }
+            throw new InvalidOperationException("M195_STEP12_ALREADY_COMPLETED_NO_REPEAT_RECOVERY");
+        }
         var native = new M195WindowsPostbootActions(state, reports);
         M195LifecycleSequence.PostbootOutcome outcome;
         try
