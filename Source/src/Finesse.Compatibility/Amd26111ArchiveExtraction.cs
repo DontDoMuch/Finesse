@@ -65,18 +65,11 @@ public static class Amd26111ArchiveExtraction
         if (drive.AvailableFreeSpace < MinimumFreeBytes)
             throw new IOException("M195_SOURCE_EXTRACTION_NEEDS_8GB_FREE");
 
-        // Source extraction selection is derived from the PINNED manifest,
-        // never from an untrusted caller-provided list or archive contents.
+        // The only extraction list is derived from the pinned original SHA
+        // manifest and exactly one original AMD main catalog path.
         string archiveRoot = OfficialAmd26111SourceContract.VerifiedFrozenM194
             .RootInInstallerArchive.TrimEnd('/');
-        var selected = inventory.Entries
-            .Select(entry => archiveRoot + "/" + entry.Relative)
-            .Append(archiveRoot + "/" +
-                OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalMainCatalogRelative)
-            .ToArray();
-        if (selected.Length != 195 || selected.Distinct(
-                StringComparer.OrdinalIgnoreCase).Count() != 195)
-            throw new InvalidDataException("M195_ORIGINAL_SELECTION_CLOSURE_NOT_195");
+        string[] selected = BuildPinnedOriginalSelection(publicOriginal194Manifest);
 
         string temp = Path.Combine(parent,
             ".finesse-m195-extract-" + Guid.NewGuid().ToString("N"));
@@ -192,6 +185,28 @@ public static class Amd26111ArchiveExtraction
             if (Directory.Exists(temp))
                 Directory.Delete(temp, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// Pure 195-path original source selector. One catalog is extracted only
+    /// for later original AMD signature validation, never as a patched catalog.
+    /// All entries are from the frozen 194-file original manifest.
+    /// </summary>
+    public static string[] BuildPinnedOriginalSelection(string manifestText)
+    {
+        AmdVerifiedSourceInventory inventory =
+            Amd26111SourceInventory.ParsePinned26111(manifestText);
+        string archiveRoot = OfficialAmd26111SourceContract.VerifiedFrozenM194
+            .RootInInstallerArchive.TrimEnd('/');
+        var selected = inventory.Entries
+            .Select(entry => archiveRoot + "/" + entry.Relative)
+            .Append(archiveRoot + "/" +
+                OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalMainCatalogRelative)
+            .ToArray();
+        if (selected.Length != 195 || selected.Distinct(
+                StringComparer.OrdinalIgnoreCase).Count() != 195)
+            throw new InvalidDataException("M195_ORIGINAL_SELECTION_CLOSURE_NOT_195");
+        return selected;
     }
 
     private static async Task<string> HashFileAsync(string path, CancellationToken ct)
