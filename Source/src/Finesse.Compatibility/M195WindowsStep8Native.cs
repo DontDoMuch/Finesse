@@ -73,7 +73,7 @@ internal static class M195WindowsStep8Native
         {
             await WriteReceiptAsync(receipt, new {
                 Schema = "Finesse.M195.Step8.v1",
-                Status = "FAILED_REVIEW_RECORDED_RECOVERY",
+                Status = "FAILED_NO_POSTBOOT_SUCCESS_REVIEW_RECOVERY_IF_BOUND",
                 Device = device.ExactHardwareId,
                 DeviceInstance = device.InstanceId,
                 Exception = error.GetType().Name + ": " + error.Message,
@@ -99,9 +99,20 @@ internal static class M195WindowsStep8Native
         private M195WindowsDriverStoreStage.StageReceipt? _stage;
         private M195WindowsNativeBind.BindReceipt? _bind;
 
-        internal string? SignerEvidence => _signer?.EvidencePath;
-        internal string? StageEvidence => _stage?.EvidenceFile;
-        internal string? BindEvidence => _bind?.EvidencePath;
+        // Native stages may write their receipt and then throw, especially
+        // after an attempted bind/rollback. Never omit a real failure receipt
+        // merely because the successful return object was never assigned.
+        internal string? SignerEvidence => _signer?.EvidencePath ??
+            Existing("M195-Live-Signer-Proof.json");
+        internal string? StageEvidence => _stage?.EvidenceFile ??
+            Existing("M195-Native-StageOnly-Receipt.json");
+        internal string? BindEvidence => _bind?.EvidencePath ??
+            Existing("M195-Native-Bind-Receipt.json");
+        private string? Existing(string name)
+        {
+            string path = Path.Combine(_verified.EvidenceDirectory, name);
+            return File.Exists(path) ? path : null;
+        }
         internal object? RecoveryEvidence { get; private set; }
 
         internal WindowsPhases(
