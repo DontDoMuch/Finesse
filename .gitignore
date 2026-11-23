@@ -1,0 +1,29 @@
+# BYOF Finesse — public source only; never commit vendor drivers or private keys.
+**/bin/
+**/obj/
+**/.vs/
+dist/
+*.user
+*.suo
+*.pfx
+*.p12
+*.pvk
+*.key
+*.snk
+*.inf
+*.dat
+*.cat
+*.sys
+*.msi
+*.msix
+*.zip
+*.7z
+*.exe
+*.dll
+!*.cs
+!*.csproj
+# Generated test evidence and local AMD package extraction.
+Reports/
+PreparedSoftware/
+AMD-Official-Source/
+M195-Unsigned-*/
