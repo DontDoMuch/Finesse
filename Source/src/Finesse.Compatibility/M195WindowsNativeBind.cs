@@ -300,6 +300,43 @@ public static class M195WindowsNativeBind
         return await TryRestoreAsync(bound.Plan, backupInf);
     }
 
+    /// <summary>
+    /// Recovery after first durable postboot snapshot. The caller must have
+    /// proved a genuine new boot, and exactly the physical target display.
+    /// Reuses frozen M180 recovery export SHA manifest and active Code 0
+    /// observation; it never requests an additional Windows reboot.
+    /// </summary>
+    internal static Task<RecoveryEvidence> RestoreAfterPostbootFailureAsync(
+        M195LifecycleSequence.PendingPostboot pending,
+        string observedHardwareId,
+        M195WindowsGpuInventory.ExactGpu observed)
+    {
+        M195PostbootTicketContract.RequireValid(pending);
+        ArgumentNullException.ThrowIfNull(observed);
+        HandheldProfile expected = HandheldProfiles.Resolve(pending.ExactHardwareId) ??
+            throw new InvalidDataException("M195_POSTBOOT_PROFILE_UNKNOWN");
+        if (observed.Profile != expected ||
+            !observed.Display.InstanceId.Equals(pending.InstanceId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !observed.Display.HardwareIds.Any(h =>
+                h.Equals(observedHardwareId, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("M195_POSTBOOT_RECOVERY_HARDWARE_ID_DRIFT");
+        var original = new M195LifecycleSequence.AssignedDriver(
+            pending.OriginalPublishedInf, pending.OriginalDriverVersion,
+            0, pending.VerifiedBackupDirectory is not null,
+            "Original driver from verified preboot transaction");
+        var baseline = new M195LifecycleSequence.Baseline(
+            pending.VerifiedBackupDirectory,
+            pending.VerifiedBackupDirectory is not null,
+            pending.VerifiedBackupDirectory is null ? null :
+                pending.OriginalPublishedInf);
+        string? verifiedInf = VerifyRecoveryExport(original, baseline);
+        var plan = new BindPlan(pending.InstanceId, observedHardwareId,
+            pending.ExpectedPublishedInf, pending.OriginalPublishedInf,
+            pending.OriginalDriverVersion, expected);
+        return TryRestoreAsync(plan, verifiedInf);
+    }
+
     internal sealed record RecoveryEvidence(bool ApiAccepted, int WindowsError,
         bool RebootRequired, string? ObservedInf, string? ObservedVersion,
         uint? ObservedProblemCode, bool ConfirmedCode0, string Status);
