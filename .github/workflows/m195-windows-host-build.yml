@@ -64,4 +64,16 @@ jobs:
           Write-Host "M195_HOST_SIGNING_STATUS=$($signature.Status)"
           Write-Host 'M195_HARDWARE_NOT_TESTED=TRUE'
           Write-Host 'M195_DRIVER_INSTALL_NOT_EXECUTED=TRUE'
-      # Build-only; deliberately do NOT upload or publish an unsigned EXE.
+          # Artifact contains the exact runner-verified EXE and independent
+          # checksum, not a signed release or a changed/repacked installer.
+          Set-Content -LiteralPath (Join-Path $dest 'Finesse.exe.sha256') -Value ("$sha *Finesse.exe") -Encoding ascii
+      - name: Attach unsigned M195 hardware-test EXE (never a GitHub Release)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Finesse-M195-Hardware-Test-UNSIGNED
+          path: |
+            ${{ runner.temp }}/Finesse-M195-Host-BuildOnly/Finesse.exe
+            ${{ runner.temp }}/Finesse-M195-Host-BuildOnly/Finesse.exe.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
