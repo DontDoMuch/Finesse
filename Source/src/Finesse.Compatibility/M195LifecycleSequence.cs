@@ -48,8 +48,8 @@ public static class M195LifecycleSequence
         string TransactionId, string InstanceId, string ExactHardwareId,
         string ExpectedPublishedInf, string ExpectedDriverVersion,
         string ExpectedInstallerSha256, string ExpectedMainCatalogSha256,
-        string OriginalPublishedInf, string? VerifiedBackupDirectory,
-        bool PrebootCode43, string RegisteredBootIdentity);
+        string OriginalPublishedInf, string OriginalDriverVersion,
+        string? VerifiedBackupDirectory, bool PrebootCode43, string RegisteredBootIdentity);
 
     public sealed record PostbootOutcome(PostbootState Status, PostbootObservation FirstObservation,
         RecoveryResult? Recovery, bool TargetDriverConfirmed);
@@ -76,8 +76,8 @@ public static class M195LifecycleSequence
         Task<SoftwareResult> InstallVerifiedAmdSoftwareAsync(
             OfficialAmdInstallerVerifier.VerifiedSource source, BoundDriver bound, CancellationToken token);
         Task<RegisteredPostboot> RegisterPostbootAsync(
-            Device device, AssignedDriver original, Baseline baseline,
-            BoundDriver bound, CancellationToken token);
+            PendingPostboot pending, AssignedDriver original, Baseline baseline,
+            CancellationToken token);
         Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token);
         Task RequestSingleRestartAsync(RegisteredPostboot registration, CancellationToken token);
         Task<RecoveryResult> RestoreBaselineAfterPrebootFailureAsync(
@@ -213,17 +213,20 @@ public static class M195LifecycleSequence
             string bootIdentity = await actions.ReadPreRebootBootIdentityAsync(token);
             if (string.IsNullOrWhiteSpace(bootIdentity))
                 throw new InvalidDataException("M195_LIFECYCLE_BOOT_IDENTITY_MISSING");
-            var registration = await actions.RegisterPostbootAsync(
-                device, assigned, baseline, bound, token);
-            if (registration is null || !registration.RegistrationVerified ||
-                string.IsNullOrWhiteSpace(registration.TransactionId))
-                throw new InvalidDataException("M195_LIFECYCLE_POSTBOOT_REGISTRATION_FAILED");
-
-            var pending = new PendingPostboot(registration.TransactionId, device.InstanceId,
-                device.ExactHardwareId, bound.PublishedInf, bound.TargetDriverVersion,
+            // Persist exactly the ticket which the future postboot process
+            // will read. Registration MUST not rebuild it from incomplete inputs.
+            var pending = new PendingPostboot(Guid.NewGuid().ToString("N"),
+                device.InstanceId, device.ExactHardwareId,
+                bound.PublishedInf, bound.TargetDriverVersion,
                 source.Sha256, bound.MainSignedCatalogSha256,
-                assigned.PublishedInf, baseline.VerifiedExportDirectory,
+                assigned.PublishedInf, assigned.Version, baseline.VerifiedExportDirectory,
                 preboot.Classification == PrebootState.Code43AwaitingPostboot, bootIdentity);
+            var registration = await actions.RegisterPostbootAsync(
+                pending, assigned, baseline, token);
+            if (registration is null || !registration.RegistrationVerified ||
+                !string.Equals(registration.TransactionId, pending.TransactionId,
+                    StringComparison.Ordinal))
+                throw new InvalidDataException("M195_LIFECYCLE_POSTBOOT_REGISTRATION_FAILED");
 
             // Exactly one normal reboot request. The adapter must persist
             // "pending" transaction data as part of RegisterPostbootAsync.
