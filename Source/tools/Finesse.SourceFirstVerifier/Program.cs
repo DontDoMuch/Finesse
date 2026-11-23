@@ -10,9 +10,9 @@ using Finesse.Compatibility;
 // Never feed its output to pnputil without the remaining signing/trust lifecycle.
 try
 {
-    if (args.Length != 10)
+    if (args.Length != 12)
         throw new ArgumentException(
-            "Usage: --display-root ORIGINAL_AMD_WT6A_INF " +
+            "Usage: --installer EXACT_OFFICIAL_AMD_26_11_1_EXE --display-root ORIGINAL_AMD_WT6A_INF " +
             "--source-manifest PINNED_194_SHA256_MANIFEST " +
             "--lenovo-policy VERIFIED_POLICY_ROWS " +
             "--profile Go1|GoS|Go2 --output-dir NEW_DIRECTORY");
@@ -29,7 +29,7 @@ try
         ? value : throw new ArgumentException("Missing option: " + key);
     if (options.Keys.Any(k => k is not (
         "--display-root" or "--source-manifest" or "--lenovo-policy" or
-        "--profile" or "--output-dir")))
+        "--profile" or "--output-dir" or "--installer")))
         throw new ArgumentException("Unknown argument supplied.");
 
     HandheldProfile profile = Get("--profile") switch
@@ -39,6 +39,7 @@ try
         "Go2" => HandheldProfiles.Go2,
         _ => throw new ArgumentException("Unsupported exact hardware profile")
     };
+    string installerFile = Path.GetFullPath(Get("--installer"));
     string sourceRoot = Path.GetFullPath(Get("--display-root"));
     string policyPath = Path.GetFullPath(Get("--lenovo-policy"));
     string manifestPath = Path.GetFullPath(Get("--source-manifest"));
@@ -46,6 +47,15 @@ try
     if (!Directory.Exists(sourceRoot) ||
         !File.Exists(policyPath) || !File.Exists(manifestPath))
         throw new FileNotFoundException("The original AMD extraction, policy and source manifest are required.");
+
+    // The original AMD installer must pass its EXACT frozen 26.11.1 size,
+    // SHA-256, Windows WinVerifyTrust and signer checks first. This does not
+    // execute the installer or imply the already-extracted folder is trusted:
+    // all 194 original files are independently checked below.
+    OfficialAmdInstallerVerifier.VerifiedSource verifiedInstaller =
+        await OfficialAmdInstallerVerifier.Verify26111Async(installerFile);
+    Console.WriteLine("VerifiedOfficialAmdInstallerSHA256=" + verifiedInstaller.Sha256);
+    Console.WriteLine("VerifiedWindowsSigner=" + verifiedInstaller.SignerSubject);
 
     // Only original AMD inputs are read; no patched vendor data is embedded.
     OfficialAmd26111SourceContract contract =
