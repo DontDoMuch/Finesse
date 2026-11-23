@@ -4,8 +4,6 @@ using Finesse.Compatibility;
 
 // Offline, file-only compatibility-recipe reproduction.
 // No privileged operations; does not sign, stage or install a GPU driver.
-const string release = "26.20.15.16-261109a-206030E-AMD-Software-Adrenalin-Edition";
-const string originalDatHash = "2DC60D0B41488E504E78213B8DA1DF790E7E39AF67A892E9441F41642659E459";
 try
 {
     if (args.Length != 10)
@@ -51,24 +49,10 @@ try
     byte[] sourceInf = File.ReadAllBytes(infPath);
     byte[] sourceDat = File.ReadAllBytes(datPath);
     string policy = File.ReadAllText(policyPath, Encoding.Latin1);
-    if (AmdInfSourceRebuilder.Sha256(sourceDat) != originalDatHash)
-        throw new InvalidDataException("Official AMD 26.11.1 original DAT SHA-256 mismatch.");
-
-    // Pinned rebuild checks the authentic original INF SHA, profile-specific
-    // frozen INF SHA, 11+11 CopyINF removals and final frozen INF SHA.
-    AmdInfSourceRebuilder.InfResult inf = AmdInfSourceRebuilder.RebuildPinned26111(
-        sourceInf, profile, policy);
-
-    // The DAT builder validates the original release-specific MetroHash and
-    // round-trip-reconstructs every original record, rather than using a blob.
-    byte[] dat = AmdDatReleaseRebuilder.BuildForVerifiedProfile(
-        sourceDat, release, profile);
-    string datHash = AmdInfSourceRebuilder.Sha256(dat);
-    string expectedDat = profile.Id == HandheldProfiles.Go2.Id
-        ? "B63E4F58C164950B41C07071B3CF6797B35ACC597B9476836FCA66E8A658E3FD"
-        : "7986B5DC0CB3C2207ECE857D0060475A603B5342649D146874850C0D4A2509CA";
-    if (datHash != expectedDat)
-        throw new InvalidDataException("Rebuilt DAT is not byte-identical to frozen M194 expected SHA-256.");
+    Amd26111CandidateRecipe.VerifiedCandidate verified =
+        Amd26111CandidateRecipe.Build(sourceInf, sourceDat, policy, profile);
+    string datHash = verified.DatSha256;
+    string expectedDat = verified.DatSha256;
 
     // Nothing is written until EVERY profile, checksum and release gate passes.
     Directory.CreateDirectory(parent.FullName);
@@ -81,15 +65,15 @@ try
         string datFolder = Path.Combine(temp, "B026778");
         Directory.CreateDirectory(datFolder);
         string datOut = Path.Combine(datFolder, "amdgcf.dat");
-        File.WriteAllBytes(infOut, inf.CleanedInf);
-        File.WriteAllBytes(datOut, dat);
+        File.WriteAllBytes(infOut, verified.InfBytes);
+        File.WriteAllBytes(datOut, verified.DatBytes);
 
-        if (AmdInfSourceRebuilder.Sha256(File.ReadAllBytes(infOut)) != inf.CleanedInfSha256 ||
+        if (AmdInfSourceRebuilder.Sha256(File.ReadAllBytes(infOut)) != verified.InfSha256 ||
             AmdInfSourceRebuilder.Sha256(File.ReadAllBytes(datOut)) != expectedDat)
             throw new InvalidDataException("Staged output SHA-256 mismatch.");
 
         string manifest =
-            inf.CleanedInfSha256 + "  u0206030.inf\r\n" +
+            verified.InfSha256 + "  u0206030.inf\r\n" +
             expectedDat + "  B026778/amdgcf.dat\r\n";
         File.WriteAllText(Path.Combine(temp, "SHA256SUMS.txt"),
             manifest, new UTF8Encoding(false));
@@ -109,7 +93,7 @@ try
     }
     Console.WriteLine("M195_OFFLINE_SOURCE_REBUILD_PASS");
     Console.WriteLine("Profile=" + profile.Id);
-    Console.WriteLine("INF_SHA256=" + inf.CleanedInfSha256);
+    Console.WriteLine("INF_SHA256=" + verified.InfSha256);
     Console.WriteLine("DAT_SHA256=" + datHash);
     Console.WriteLine("OUTPUT=" + outputRoot);
     return 0;
