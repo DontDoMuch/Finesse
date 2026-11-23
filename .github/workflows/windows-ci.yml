@@ -46,6 +46,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Offline DAT verifier tool failed to compile" }
           dotnet build "Source/tools/Finesse.CandidateVerifier/Finesse.CandidateVerifier.csproj" --configuration Release
           if ($LASTEXITCODE -ne 0) { throw "Combined offline INF+DAT candidate verifier failed to compile" }
+          dotnet build "Source/tools/Finesse.SourceFirstVerifier/Finesse.SourceFirstVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "194-file original-source staging verifier failed to compile" }
 
   public-installer-source-gate:
     # This MUST NOT make every offline-source commit look like a failed CI
