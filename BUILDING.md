@@ -47,7 +47,17 @@ The compatibility core now also contains `AmdInfSourceRebuilder` and the combine
 dotnet build Source/tools/Finesse.CandidateVerifier/Finesse.CandidateVerifier.csproj -c Release
 ```
 
-For a source-driven, strictly offline INF+DAT candidate reproduction using your own authentic AMD source and authorized Lenovo policy data, see [INF and DAT integration](docs/M195-INF-DAT-INTEGRATION.md). This is a developer verification tool, **not** a driver installer. Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
+For a source-driven, strictly offline INF+DAT candidate reproduction using your own authentic AMD source and authorized Lenovo policy data, see [INF and DAT integration](docs/M195-INF-DAT-INTEGRATION.md). This is a developer verification tool, **not** a driver installer.
+
+### Source-first 194-file staging (offline)
+
+M195 also includes a source-first stager that checks an exact original 194-file AMD inventory, replaces the source-derived INF/DAT, re-verifies the complete candidate package, and stores the original main AMD catalog separately. This is **still unsigned and not installable**.
+
+```powershell
+dotnet build Source/tools/Finesse.SourceFirstVerifier/Finesse.SourceFirstVerifier.csproj -c Release
+```
+
+It requires an original AMD extraction, an authorized profile policy, and the authoritative pinned 194-file SHA-256 manifest. The full public manifest and production GUI wiring are **not yet available**. See [source-first staging](docs/M195-SOURCE-FIRST-STAGING.md). Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
 
 With the original AMD source DAT legitimately extracted, independent reviewers can reproduce the exact Go 1/Go S/Go 2 SHA-256 digests. See [offline DAT verification](docs/M195-OFFLINE-DAT-VERIFICATION.md).
 
