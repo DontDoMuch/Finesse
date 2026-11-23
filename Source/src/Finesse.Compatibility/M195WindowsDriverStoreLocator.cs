@@ -63,9 +63,14 @@ public static class M195WindowsDriverStoreLocator
         if (!string.Equals(Path.GetFileName(located.DriverStoreInfPath),
                 "u0206030.inf", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("M195_DRIVERSTORE_NOT_PINNED_26111_INF");
-        if (!File.Exists(preparedOriginalInf) || Sha(preparedOriginalInf) != located.InfSha256)
+        RejectReparseAncestors(preparedOriginalInf);
+        RejectReparseAncestors(signedCatalog);
+        if (!File.Exists(preparedOriginalInf) ||
+            Sha(preparedOriginalInf) != located.InfSha256 ||
+            Sha(located.PublishedInfPath) != located.InfSha256)
             throw new InvalidDataException("M195_DRIVERSTORE_INF_NOT_SOURCE_IDENTICAL");
         string cat = Path.Combine(located.DriverStoreRoot, "u0206030.cat");
+        RejectReparseAncestors(cat);
         if (!File.Exists(cat) ||
             !string.Equals(Sha(cat), signedCatalogSha256,
                 StringComparison.OrdinalIgnoreCase) ||
