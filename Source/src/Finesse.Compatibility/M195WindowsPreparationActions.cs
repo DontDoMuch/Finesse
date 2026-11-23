@@ -3,7 +3,7 @@ namespace Finesse.Compatibility;
 /// <summary>
 /// Concrete Windows implementation of lifecycle Steps 1-7 against the
 /// REAL native APIs and the source-verified 26.11.1 preparation components.
-/// Steps 8-12 deliberately remain unimplemented while M194 M175/M179/MSI/
+/// Live Steps 8, 10-12 deliberately remain unimplemented while M194 M175/M179/MSI/
 /// postboot functionality is being migrated and verified. It CANNOT install,
 /// bind, sign, reboot, or alter trust by itself.
 /// </summary>
@@ -219,7 +219,7 @@ public sealed class M195WindowsPreparationActions :
     public Task<M195LifecycleSequence.PrebootObservation> ObservePrebootAsync(
         M195LifecycleSequence.Device device, M195LifecycleSequence.BoundDriver bound,
         CancellationToken token) =>
-        throw new NotSupportedException("M195_NATIVE_PREBOOT_VALIDATION_NOT_YET_PORTED");
+        M195WindowsPrebootObservation.ObserveAsync(device, bound, token);
 
     public Task<M195LifecycleSequence.SoftwareResult> InstallVerifiedAmdSoftwareAsync(
         OfficialAmdInstallerVerifier.VerifiedSource source,
