@@ -13,8 +13,16 @@ permissions:
 jobs:
   inf2cat-toolchain-probe:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
+      - name: Checkout verified Finesse source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
       - name: Inspect pinned WDK NuGet contents and exercise portable Inf2Cat
         shell: pwsh
         run: |
@@ -64,3 +72,16 @@ jobs:
           $message=@(Get-Content -LiteralPath $out,$err -Raw) -join [Environment]::NewLine
           if ($message -match 'Could not load file or assembly|system cannot find the file specified|FileNotFoundException') { throw 'Portable Inf2Cat has an unresolved dependency' }
           Write-Host 'M195_PORTABLE_INF2CAT_DEPENDENCY_BOOT_PASS'
+      - name: Run actual Finesse portable tool bootstrap on clean Windows runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Reuse exactly the checksum-verified Microsoft WDK package downloaded
+          # above; let Finesse fetch the remaining pinned prerequisites itself.
+          $src=Join-Path $env:RUNNER_TEMP 'M195-WDK-Pinned.nupkg'
+          $dst=Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\packages\Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
+          Copy-Item -LiteralPath $src -Destination $dst
+          dotnet run --project 'Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj' --configuration Release -- --pinned-tool-runtime-probe
+          if ($LASTEXITCODE -ne 0) { throw "Finesse full portable bootstrap failed: $LASTEXITCODE" }
+          Write-Host 'M195_CLEAN_WINDOWS_REAL_BOOTSTRAP_SMOKE_PASS'
