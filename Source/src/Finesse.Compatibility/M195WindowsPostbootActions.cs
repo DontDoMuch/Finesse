@@ -122,6 +122,17 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
                     catch { /* retain the original transaction failure */ }
                 }
             }
+            // Export the first-failure evidence for troubleshooting, but do
+            // not let a download failure hide the original postboot failure.
+            if (native._firstFile is not null && File.Exists(native._firstFile))
+            {
+                try
+                {
+                    _ = await M195PostbootEvidenceExporter.ExportAsync(
+                        reports, state.Pending.TransactionId, token: CancellationToken.None);
+                }
+                catch { /* original failure and first snapshot remain immutable */ }
+            }
             throw;
         }
         // The one-shot task is removed AFTER the original first observation,
@@ -135,6 +146,34 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
                     Schema = "Finesse.M195.PostbootCleanupWarning.v1",
                     Warning = error.ToString(), TaskName = state.TaskName
                 }, CancellationToken.None);
+        }
+        // Deliver a SHA-256-checkable ZIP in Downloads/Finesse/Reports. The
+        // result remains authoritative even if a user's Downloads folder is
+        // redirected, protected or unavailable; report export is diagnostic.
+        try
+        {
+            M195PostbootEvidenceExporter.ExportResult exported =
+                await M195PostbootEvidenceExporter.ExportAsync(
+                    reports, state.Pending.TransactionId, token: CancellationToken.None);
+            await M195WindowsPostbootRegistration.WriteNewAsync(
+                Path.Combine(reports, "M195-ReportExport.json"), new {
+                    Schema = "Finesse.M195.PostbootReportExport.v1",
+                    exported.ZipFile, exported.ZipSha256,
+                    exported.FilesIncluded, exported.Sha256Sidecar
+                }, CancellationToken.None);
+        }
+        catch (Exception reportError)
+        {
+            try
+            {
+                await M195WindowsPostbootRegistration.WriteNewAsync(
+                    Path.Combine(reports, "M195-ReportExportWarning.json"), new {
+                        Schema = "Finesse.M195.PostbootReportExportWarning.v1",
+                        Failure = reportError.GetType().Name + ": " + reportError.Message,
+                        GpuVerificationNotChanged = true
+                    }, CancellationToken.None);
+            }
+            catch { /* diagnostic issue cannot change Code0 outcome */ }
         }
         return outcome;
     }
