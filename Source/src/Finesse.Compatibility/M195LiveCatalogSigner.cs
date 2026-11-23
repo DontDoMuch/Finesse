@@ -43,6 +43,7 @@ internal static class M195LiveCatalogSigner
             Hash(verified.PinnedSignTool) != M195LiveSigningPreflight.PinnedMicrosoftSignToolSha256 ||
             Hash(verified.OriginalAmdCatalog) != M195LiveSigningPreflight.PinnedOriginalAmdMainCatalogSha256)
             throw new InvalidDataException("M195_SIGN_FILE_CHANGED_AFTER_PREFLIGHT");
+        VerifyAllMembers(verified);
         string dir = verified.EvidenceDirectory;
         string scriptPath = Path.Combine(dir, "M195-Live-Signer-Script.ps1");
         string proofPath = Path.Combine(dir, "M195-Live-Signer-Proof.json");
@@ -118,6 +119,10 @@ internal static class M195LiveCatalogSigner
         if (!M195LiveSigningPreflight.IsOwnedSigner(thumb, subject))
             throw new InvalidDataException("M195_SIGN_CERTIFICATE_IDENTITY_INVALID");
         string finalSha = Hash(verified.UnsignedMainCatalog);
+        VerifyAllMembers(verified);
+        if (Hash(verified.OriginalAmdCatalog) !=
+                M195LiveSigningPreflight.PinnedOriginalAmdMainCatalogSha256)
+            throw new InvalidDataException("M195_SIGN_ORIGINAL_AMD_CATALOG_CHANGED");
         if (p.GetProperty("CatalogSha256").GetString() != finalSha ||
             finalSha == verified.UnsignedCatalogSha256)
             throw new InvalidDataException("M195_SIGN_CATALOG_NOT_CHANGED_AS_EXPECTED");
@@ -135,6 +140,35 @@ internal static class M195LiveCatalogSigner
         }
         return new Signed(verified.UnsignedMainCatalog,
             finalSha, thumb, subject, proofPath, true);
+    }
+
+    private static void VerifyAllMembers(M195LiveSigningPreflight.Verified verified)
+    {
+        string[] files = Directory.GetFiles(verified.PackageRoot, "*",
+            SearchOption.AllDirectories);
+        if (verified.ExpectedMemberHashes.Count != 194 || files.Length != 195)
+            throw new InvalidDataException("M195_SIGN_FILE_COUNT_CHANGED");
+        int observed = 0;
+        foreach (string file in files)
+        {
+            string relative = Path.GetRelativePath(verified.PackageRoot, file)
+                .Replace('\\', '/');
+            Amd26111SourceInventory.ValidateRelative(relative);
+            if (relative.Equals("u0206030.cat", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!verified.ExpectedMemberHashes.TryGetValue(relative, out string? sha) ||
+                sha != FileSha(file))
+                throw new InvalidDataException("M195_SIGN_DRIVER_MEMBER_MUTATED: " + relative);
+            observed++;
+        }
+        if (observed != 194)
+            throw new InvalidDataException("M195_SIGN_DRIVER_MEMBERS_MISSING");
+    }
+
+    private static string FileSha(string file)
+    {
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     private const string Script = """
