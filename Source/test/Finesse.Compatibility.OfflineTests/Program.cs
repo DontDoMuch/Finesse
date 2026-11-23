@@ -63,7 +63,9 @@ BinaryPrimitives.WriteUInt64LittleEndian(synthetic.AsSpan(4, 8), 0x0123456789ABC
 payload.CopyTo(synthetic, 12);
 var roundtrip = AmdDatRecordCodec.Decode(synthetic);
 Check(roundtrip.Records.SequenceEqual(merged), "payload full roundtrip");
-Check(payload[0] != original[12], "positional re-encoding after merge");
+Check(!payload.AsSpan(2 * AmdDatRecordCodec.RecordBytes, 2)
+        .SequenceEqual(original.AsSpan(AmdDatRecordCodec.HeaderBytes + AmdDatRecordCodec.RecordBytes, 2)),
+      "positional re-encoding after merge");
 
 Reject(() => AmdDatRecordCodec.Decode(new byte[11]), "reject short header");
 Reject(() => AmdDatRecordCodec.Decode(new byte[12]), "reject zero count");
