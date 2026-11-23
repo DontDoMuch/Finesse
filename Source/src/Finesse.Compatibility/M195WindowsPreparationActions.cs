@@ -1,17 +1,17 @@
 namespace Finesse.Compatibility;
 
 /// <summary>
-/// Concrete Windows implementation of lifecycle Steps 1-7 against the
-/// REAL native APIs and the source-verified 26.11.1 preparation components.
-/// Live Steps 8, 10-12 deliberately remain unimplemented while M194 M175/M179/MSI/
-/// postboot functionality is being migrated and verified. It CANNOT install,
-/// bind, sign, reboot, or alter trust by itself.
+/// Concrete Windows implementation of Steps 1-7 and the independently
+/// source-verified Step 11 registration/reboot adapter. Live Steps 8, 10 and
+/// 12 remain disconnected pending whole-lifecycle source parity. A standalone
+/// preparation call cannot bind/sign/install software or schedule a reboot.
 /// </summary>
 public sealed class M195WindowsPreparationActions :
     M195LifecycleSequence.IWindowsInstallationActions
 {
     private readonly Settings _settings;
     private M195WindowsGpuInventory.ExactGpu? _observed;
+    private M195WindowsPostbootRegistration.Registration? _registeredPostboot;
 
     public sealed record Settings(
         string FreshRecoveryRoot,
@@ -22,7 +22,8 @@ public sealed class M195WindowsPreparationActions :
         string PinnedInf2CatExePath,
         string Original194ManifestText,
         string AuthorizedProfilePolicyRows,
-        string? LocalOfficialAmdInstaller = null);
+        string? LocalOfficialAmdInstaller = null,
+        string? FreshPostbootEvidenceRoot = null);
 
     public sealed record PreparedUnsignedReceipt(
         M195LifecycleSequence.Device Device,
@@ -226,18 +227,39 @@ public sealed class M195WindowsPreparationActions :
         M195LifecycleSequence.BoundDriver bound, CancellationToken token) =>
         throw new NotSupportedException("M195_NATIVE_ADRENALIN_INSTALL_NOT_YET_PORTED");
 
-    public Task<M195LifecycleSequence.RegisteredPostboot> RegisterPostbootAsync(
+    public async Task<M195LifecycleSequence.RegisteredPostboot> RegisterPostbootAsync(
         M195LifecycleSequence.PendingPostboot pending,
         M195LifecycleSequence.AssignedDriver original,
-        M195LifecycleSequence.Baseline baseline, CancellationToken token) =>
-        throw new NotSupportedException("M195_NATIVE_POSTBOOT_REGISTRATION_NOT_YET_PORTED");
+        M195LifecycleSequence.Baseline baseline, CancellationToken token)
+    {
+        if (_registeredPostboot is not null)
+            throw new InvalidOperationException("M195_STEP11_ALREADY_REGISTERED");
+        if (string.IsNullOrWhiteSpace(_settings.FreshPostbootEvidenceRoot))
+            throw new NotSupportedException("M195_STEP11_FRESH_EVIDENCE_ROOT_NOT_CONFIGURED");
+        M195WindowsPostbootRegistration.Registration result =
+            await M195WindowsPostbootRegistration.RegisterAsync(
+                pending, original, baseline,
+                _settings.FreshPostbootEvidenceRoot, token);
+        _registeredPostboot = result;
+        return result.Result;
+    }
 
-    public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token) =>
-        throw new NotSupportedException("M195_NATIVE_BOOT_IDENTITY_NOT_YET_PORTED");
+    public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return Task.FromResult(M195PostbootTicketContract.CurrentBootUtc());
+    }
 
     public Task RequestSingleRestartAsync(
-        M195LifecycleSequence.RegisteredPostboot registration, CancellationToken token) =>
-        throw new NotSupportedException("M195_NATIVE_REBOOT_NOT_YET_PORTED");
+        M195LifecycleSequence.RegisteredPostboot registration, CancellationToken token)
+    {
+        if (_registeredPostboot is null ||
+            registration.TransactionId != _registeredPostboot.Result.TransactionId ||
+            !registration.RegistrationVerified)
+            throw new InvalidDataException("M195_STEP11_RESTART_WITHOUT_VERIFIED_REGISTRATION");
+        return M195WindowsPostbootRegistration.RequestSingleRestartAsync(
+            _registeredPostboot, token);
+    }
 
     public Task<M195LifecycleSequence.RecoveryResult> RestoreBaselineAfterPrebootFailureAsync(
         M195LifecycleSequence.Device device,
