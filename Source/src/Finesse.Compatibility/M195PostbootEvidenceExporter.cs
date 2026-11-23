@@ -15,11 +15,13 @@ internal static class M195PostbootEvidenceExporter
 {
     internal sealed record ExportResult(
         string ZipFile, string ZipSha256, string Sha256Sidecar,
-        int FilesIncluded, string TransactionId);
+        int FilesIncluded, string TransactionId,
+        int PrebootFilesIncluded = 0);
 
     internal static async Task<ExportResult> ExportAsync(
         string sourceReportsDirectory, string transactionId,
-        string? destinationRoot = null, CancellationToken token = default)
+        string? destinationRoot = null, CancellationToken token = default,
+        string? prebootSessionDirectory = null)
     {
         if (!Guid.TryParseExact(transactionId, "N", out Guid guid) ||
             !string.Equals(guid.ToString("N"), transactionId,
@@ -29,25 +31,79 @@ internal static class M195PostbootEvidenceExporter
         RejectReparseAncestors(source);
         if (!Directory.Exists(source))
             throw new DirectoryNotFoundException(source);
-        string[] all = Directory.GetFiles(source, "*",
-            SearchOption.TopDirectoryOnly);
-        string[] included = all.Where(p =>
-            Path.GetFileName(p).StartsWith("M195-", StringComparison.Ordinal) &&
-            (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
-             p.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ||
-             p.EndsWith(".log", StringComparison.OrdinalIgnoreCase)))
-            .Order(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (included.Length < 1 || included.Length > 200 ||
-            !included.Any(p => Path.GetFileName(p).StartsWith(
-                "M195-FirstPostboot-", StringComparison.Ordinal) &&
-                p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+        // Preserve the original root filenames for existing postboot reports.
+        // Optional preboot receipts live in an admin-owned session workspace;
+        // only explicitly named diagnostics are copied. NO .INF/.DAT/.CAT,
+        // .DLL/.SYS/.EXE, private keys, driver-store exports or vendor files.
+        var included = new List<(string Absolute, string Entry)>();
+        bool firstFound = false;
+        foreach (string path in Directory.GetFiles(source, "*",
+            SearchOption.TopDirectoryOnly))
+        {
+            string name = Path.GetFileName(path);
+            if (!IsDiagnosticFile(name) ||
+                !name.StartsWith("M195-", StringComparison.Ordinal))
+                continue;
+            included.Add((path, name));
+            firstFound |= name.StartsWith("M195-FirstPostboot-",
+                StringComparison.Ordinal) &&
+                name.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        }
+        if (!firstFound)
             throw new InvalidDataException("M195_EXPORT_NO_IMMUTABLE_FIRST_SNAPSHOT");
+
+        int prebootIncluded = 0;
+        bool prebootAvailable = false;
+        if (!string.IsNullOrWhiteSpace(prebootSessionDirectory))
+        {
+            string preboot = Path.GetFullPath(prebootSessionDirectory);
+            RejectReparseAncestors(preboot);
+            if (Directory.Exists(preboot))
+            {
+                prebootAvailable = true;
+                var pending = new Stack<string>();
+                pending.Push(preboot);
+                int scannedDirectories = 0;
+                while (pending.Count > 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                    string current = pending.Pop();
+                    if (++scannedDirectories > 2000)
+                        throw new InvalidDataException("M195_EXPORT_TOO_MANY_SESSION_DIRECTORIES");
+                    foreach (string directory in Directory.EnumerateDirectories(current))
+                    {
+                        RejectReparseAncestors(directory);
+                        pending.Push(directory);
+                    }
+                    foreach (string file in Directory.EnumerateFiles(current, "*",
+                        SearchOption.TopDirectoryOnly))
+                    {
+                        string name = Path.GetFileName(file);
+                        if (!IsDiagnosticFile(name) || !IsPrebootReceiptName(name))
+                            continue;
+                        string relative = Path.GetRelativePath(preboot, file).Replace('\\', '/');
+                        if (relative.StartsWith("../", StringComparison.Ordinal) ||
+                            relative.StartsWith("/", StringComparison.Ordinal) ||
+                            relative.Split('/').Any(segment =>
+                                segment is "." or ".." or ""))
+                            throw new InvalidDataException("M195_EXPORT_PREBOOT_PATH_ESCAPE");
+                        included.Add((file, "Preboot/" + relative));
+                        prebootIncluded++;
+                    }
+                }
+            }
+        }
+        if (included.Count < 1 || included.Count > 500 ||
+            included.Select(x => x.Entry).Distinct(
+                StringComparer.OrdinalIgnoreCase).Count() != included.Count)
+            throw new InvalidDataException("M195_EXPORT_EVIDENCE_COUNT_OR_DUPLICATE");
+        included.Sort((x, y) => StringComparer.OrdinalIgnoreCase.Compare(x.Entry, y.Entry));
         long totalBytes = 0;
-        foreach (string file in included)
+        foreach (var item in included)
         {
             token.ThrowIfCancellationRequested();
-            RejectReparseAncestors(file);
-            long bytes = new FileInfo(file).Length;
+            RejectReparseAncestors(item.Absolute);
+            long bytes = new FileInfo(item.Absolute).Length;
             if (bytes is < 1 or > 30_000_000)
                 throw new InvalidDataException("M195_EXPORT_EVIDENCE_SIZE_INVALID");
             totalBytes = checked(totalBytes + bytes);
@@ -75,22 +131,30 @@ internal static class M195PostbootEvidenceExporter
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create,
                 leaveOpen: false))
             {
-                foreach (string file in included)
+                foreach (var item in included)
                 {
                     token.ThrowIfCancellationRequested();
-                    string entryName = Path.GetFileName(file);
-                    ZipArchiveEntry entry = archive.CreateEntry(entryName,
+                    ZipArchiveEntry entry = archive.CreateEntry(item.Entry,
                         CompressionLevel.Optimal);
+                    using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                    long count = 0;
                     await using (Stream output = entry.Open())
-                    await using (FileStream input = new FileStream(file,
+                    await using (FileStream input = new FileStream(item.Absolute,
                         FileMode.Open, FileAccess.Read, FileShare.Read))
-                        await input.CopyToAsync(output, token);
-                    using FileStream hasher = File.OpenRead(file);
-                    string hash = Convert.ToHexString(SHA256.HashData(hasher));
-                    inventory.Add(new {
-                        File = entryName, Bytes = new FileInfo(file).Length,
-                        Sha256 = hash
-                    });
+                    {
+                        byte[] buffer = new byte[64 * 1024];
+                        int read;
+                        while ((read = await input.ReadAsync(buffer, token)) > 0)
+                        {
+                            count = checked(count + read);
+                            if (count > 30_000_000)
+                                throw new InvalidDataException("M195_EXPORT_FILE_CHANGED_OR_TOO_LARGE");
+                            hasher.AppendData(buffer, 0, read);
+                            await output.WriteAsync(buffer.AsMemory(0, read), token);
+                        }
+                    }
+                    string hash = Convert.ToHexString(hasher.GetHashAndReset());
+                    inventory.Add(new { File = item.Entry, Bytes = count, Sha256 = hash });
                 }
                 ZipArchiveEntry manifest = archive.CreateEntry(
                     "M195-Export-Manifest.json", CompressionLevel.Optimal);
@@ -100,7 +164,11 @@ internal static class M195PostbootEvidenceExporter
                     TransactionId = transactionId,
                     CreatedUtc = DateTimeOffset.UtcNow,
                     SourceEvidencePreserved = true,
+                    PrebootSourceAvailable = prebootAvailable,
+                    PrebootFilesIncluded = prebootIncluded,
+                    PostbootFilesIncluded = included.Count - prebootIncluded,
                     NoDriverOrSoftwareMutation = true,
+                    VendorDriverBinariesIncluded = false,
                     Files = inventory
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 await outStream.WriteAsync(json, token);
@@ -115,7 +183,7 @@ internal static class M195PostbootEvidenceExporter
                 zipSha + "  " + Path.GetFileName(finalZip) + "\n",
                 new UTF8Encoding(false), token);
             return new ExportResult(finalZip, zipSha,
-                shaFile, included.Length, transactionId);
+                shaFile, included.Count, transactionId, prebootIncluded);
         }
         finally
         {
@@ -123,6 +191,18 @@ internal static class M195PostbootEvidenceExporter
                 File.Delete(temporary);
         }
     }
+
+    private static bool IsDiagnosticFile(string name) =>
+        name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+        name.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+        name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPrebootReceiptName(string name) =>
+        name.StartsWith("M195-", StringComparison.Ordinal) ||
+        name.Equals("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("SelectedOriginalAMD.txt", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("7zr-stdout.txt", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("7zr-stderr.txt", StringComparison.OrdinalIgnoreCase);
 
     private static void RejectReparseAncestors(string path)
     {
