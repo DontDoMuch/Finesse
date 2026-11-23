@@ -4,9 +4,9 @@ using Finesse.Compatibility;
 // Offline-only M195 integration harness for source-first original AMD package
 // acquisition -> exact INF/DAT candidate -> 194-file unsigned staging.
 //
-// The caller must have already extracted the trusted, authentic official AMD
-// 26.11.1 display package. This tool does NOT authenticate an AMD EXE signature;
-// source provenance must be checked separately by the Windows acquisition layer.
+// The caller supplies an official AMD 26.11.1 EXE and its isolated original
+// extraction. The tool verifies the EXE signature + pinned source identity,
+// then independently verifies all 194 original extracted files.
 // Never feed its output to pnputil without the remaining signing/trust lifecycle.
 try
 {
@@ -48,32 +48,17 @@ try
         !File.Exists(policyPath) || !File.Exists(manifestPath))
         throw new FileNotFoundException("The original AMD extraction, policy and source manifest are required.");
 
-    // The original AMD installer must pass its EXACT frozen 26.11.1 size,
-    // SHA-256, Windows WinVerifyTrust and signer checks first. This does not
-    // execute the installer or imply the already-extracted folder is trusted:
-    // all 194 original files are independently checked below.
-    OfficialAmdInstallerVerifier.VerifiedSource verifiedInstaller =
-        await OfficialAmdInstallerVerifier.Verify26111Async(installerFile);
-    Console.WriteLine("VerifiedOfficialAmdInstallerSHA256=" + verifiedInstaller.Sha256);
-    Console.WriteLine("VerifiedWindowsSigner=" + verifiedInstaller.SignerSubject);
-
-    // Only original AMD inputs are read; no patched vendor data is embedded.
-    OfficialAmd26111SourceContract contract =
-        OfficialAmd26111SourceContract.VerifiedFrozenM194;
-    byte[] officialInf = File.ReadAllBytes(Path.Combine(sourceRoot, contract.OriginalInfRelative));
-    byte[] officialDat = File.ReadAllBytes(Path.Combine(sourceRoot,
-        contract.OriginalDatRelative.Replace('/', Path.DirectorySeparatorChar)));
+    // One source-first entry point is shared between this offline CLI and
+    // the future GUI acquisition layer. No signing or installation here.
     string policyRows = File.ReadAllText(policyPath, Encoding.Latin1);
     string sourceManifest = File.ReadAllText(manifestPath, Encoding.UTF8);
-    Amd26111CandidateRecipe.VerifiedCandidate candidate = Amd26111CandidateRecipe.Build(
-        officialInf, officialDat, policyRows, profile);
-
-    // Requires a pinned 194-file source manifest and preserves original main
-    // AMD catalog outside PreparedDriver. All source hashes checked BEFORE
-    // anything is copied, and only 194 unsigned files are staged.
-    AmdSourceFirstStager.UnsignedStageResult staged =
-        await AmdSourceFirstStager.StagePinned26111Async(
-            sourceRoot, destination, sourceManifest, candidate);
+    Amd26111TwoPhasePreparation.PreparationReceipt outcome =
+        await Amd26111TwoPhasePreparation.VerifyAndStageAsync(
+            installerFile, sourceRoot, sourceManifest, policyRows, profile, destination);
+    var candidate = outcome.Candidate;
+    var staged = outcome.UnsignedStage;
+    Console.WriteLine("VerifiedOfficialAmdInstallerSHA256=" + outcome.Installer.Sha256);
+    Console.WriteLine("VerifiedWindowsSigner=" + outcome.Installer.SignerSubject);
 
     Console.WriteLine("M195_SOURCE_FIRST_UNSIGNED_STAGE_PASS");
     Console.WriteLine("Profile=" + candidate.Profile.Id);
