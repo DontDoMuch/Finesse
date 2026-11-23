@@ -34,17 +34,7 @@ public static class M195WindowsDualCatalogAudit
         // be reported as installed catalog trust for the selected handheld.
         var detected = M195WindowsGpuInventory.RequireUniqueExactGpu(
             await M195WindowsGpuInventory.EnumerateAsync(token));
-        if (detected.Profile != expectedDevice.Profile ||
-            !string.Equals(detected.Display.InstanceId, expectedDevice.InstanceId,
-                StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(detected.Profile.HardwareId, expectedDevice.ExactHardwareId,
-                StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(detected.Display.PublishedInf, publishedInf,
-                StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(detected.Display.Version,
-                OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
-                StringComparison.Ordinal))
-            throw new InvalidDataException("M195_AUDIT_PUBLISHED_INF_NOT_ASSIGNED_TO_TARGET_GPU");
+        RequireAssignedTargetDriver(expectedDevice, publishedInf, detected);
 
         string root = Path.GetFullPath(preparedCandidateRoot);
         string originalCat = Path.GetFullPath(originalAmdCatalog);
@@ -135,6 +125,31 @@ public static class M195WindowsDualCatalogAudit
         }, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(evidence, json, new UTF8Encoding(false), token);
         return new Audit(located, snapshot, assessment, evidence);
+    }
+
+    /// <summary>
+    /// Pure precondition: Driver Store files alone do not establish that the
+    /// target GPU was bound to that driver. Preboot Code 43 can still be
+    /// observed pending the one planned reboot; do not misreport Code 0.
+    /// </summary>
+    public static void RequireAssignedTargetDriver(
+        M195LifecycleSequence.Device device, string publishedInf,
+        M195WindowsGpuInventory.ExactGpu observed)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(observed);
+        string exactInf = M195WindowsBindIdentity.RequirePublishedOemInf(publishedInf);
+        if (observed.Profile != device.Profile ||
+            !string.Equals(observed.Display.InstanceId, device.InstanceId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(observed.Profile.HardwareId, device.ExactHardwareId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(observed.Display.PublishedInf, exactInf,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(observed.Display.Version,
+                OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+                StringComparison.Ordinal))
+            throw new InvalidDataException("M195_AUDIT_PUBLISHED_INF_NOT_ASSIGNED_TO_TARGET_GPU");
     }
 
     private static Task<bool> VerifyWhcpIdentityAsync(
