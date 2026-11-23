@@ -1545,6 +1545,107 @@ Check(incompleteOutcome.Status == L.PostbootState.TargetFailedRecoveryUnverified
       incompleteRollback.Calls.IndexOf("RecoverPostboot"),
     "Step12 rollback that did not achieve Code0 cannot be reported as successful target");
 
+
+// M195 internal full-lifecycle glue, strict dispatch and actual evidence ZIP.
+// No native GPU, MSI, trust, task, or reboot operations are attempted.
+Check(!typeof(M195WindowsFullLifecycleActions).IsPublic,
+    "M195 full Windows installer adapter remains INTERNAL, not a public entrypoint");
+Check(M195PostbootDispatch.IsExactResumeCommand(
+        [M195PostbootTicketContract.ResumeArgument]) &&
+      !M195PostbootDispatch.IsExactResumeCommand([]) &&
+      !M195PostbootDispatch.IsExactResumeCommand(
+        [M195PostbootTicketContract.ResumeArgument, "--extra"]) &&
+      !M195PostbootDispatch.IsExactResumeCommand(["--M195-postboot"]) &&
+      !M195PostbootDispatch.IsExactResumeCommand(["--install"]),
+    "postboot dispatch only accepts a single exact resume argument");
+int? m195NoCommand = await M195PostbootDispatch.TryHandleAsync(
+    ["--unrelated"], CancellationToken.None);
+Check(m195NoCommand is null,
+    "non-postboot argument never starts GPU, MSI or postboot recovery actions");
+M195PostbootTicketContract.RequireFinesseHostPath(
+    Path.Combine("C:", "Program Files", "Finesse", "Finesse.exe"));
+Check(true, "one-shot task host accepts exact single Finesse.exe name");
+Reject(() => M195PostbootTicketContract.RequireFinesseHostPath("dotnet.exe"),
+    "one-shot boot task refuses developer dotnet.exe as fake Finesse host");
+Reject(() => M195PostbootTicketContract.RequireFinesseHostPath("other.exe"),
+    "one-shot boot task refuses foreign executable name");
+
+var m195FullPrepSettings = new M195WindowsPreparationActions.Settings(
+    "UNCREATED_M195_FULL_RECOVERY", "UNCREATED_M195_FULL_AMD",
+    "UNCREATED_M195_FULL_EXTRACTION", "UNCREATED_M195_FULL_CANDIDATE",
+    "PINNED_7ZR_FOR_FUTURE_TEST.EXE", "PINNED_INF2CAT_FOR_FUTURE_TEST.EXE",
+    publishedInventoryText, "HKR,,OfflineDummyPolicy,0x00010001,0",
+    FreshPostbootEvidenceRoot: "UNCREATED_M195_FULL_POSTBOOT");
+var m195Full = new M195WindowsFullLifecycleActions(
+    new M195WindowsFullLifecycleActions.Settings(
+        m195FullPrepSettings, "PINNED_SIGNTOOL.EXE",
+        "PINNED_7Z_RELEASE.EXE", "UNCREATED_M195_FULL_SOFTWARE",
+        "UNCREATED_M195_FULL_MSI_LOGS", "UNCREATED_M195_FULL_ROLLBACK"));
+bool m195FullBootBlocked = false;
+try { _ = await m195Full.ReadPreRebootBootIdentityAsync(CancellationToken.None); }
+catch (InvalidOperationException) { m195FullBootBlocked = true; }
+Check(m195FullBootBlocked,
+    "full Windows adapter rejects boot identity step before verified AMD software");
+bool m195FullRestartBlocked = false;
+try {
+    await m195Full.RequestSingleRestartAsync(
+        new L.RegisteredPostboot(Guid.NewGuid().ToString("N"), true),
+        CancellationToken.None);
+}
+catch (InvalidOperationException) { m195FullRestartBlocked = true; }
+Check(m195FullRestartBlocked,
+    "full Windows adapter refuses ANY restart before actual MSI verification");
+Reject(() => m195Full.SignOnceStageBindAndVerifyDualTrustAsync(
+        null!, null!, null!, null!, CancellationToken.None).GetAwaiter().GetResult(),
+    "full native sign/bind adapter refuses synthetic Stage7 receipts before mutation");
+
+string m195ZipRoot = Path.Combine(Path.GetTempPath(),
+    "M195-OfflineEvidenceZip-" + Guid.NewGuid().ToString("N"));
+string m195ZipSource = Path.Combine(m195ZipRoot, "SourceReceipts");
+string m195ZipDest = Path.Combine(m195ZipRoot, "Downloads", "Finesse", "Reports");
+Directory.CreateDirectory(m195ZipSource);
+string m195ZipTx = Guid.NewGuid().ToString("N");
+string m195FirstName = "M195-FirstPostboot-" + m195ZipTx + ".json";
+File.WriteAllText(Path.Combine(m195ZipSource, m195FirstName),
+    "{\"FirstProblemCode\":43,\"RecoveryAttempted\":false}");
+File.WriteAllText(Path.Combine(m195ZipSource, "M195-Postboot-Outcome.json"),
+    "{\"TargetDriverConfirmed\":false}");
+File.WriteAllText(Path.Combine(m195ZipSource, "UserPrivateFile.txt"),
+    "This unrelated file MUST NOT be archived.");
+try
+{
+    var m195Archive = await M195PostbootEvidenceExporter.ExportAsync(
+        m195ZipSource, m195ZipTx, m195ZipDest);
+    Check(m195Archive.FilesIncluded == 2 &&
+          File.Exists(m195Archive.ZipFile) &&
+          File.Exists(m195Archive.Sha256Sidecar) &&
+          m195Archive.ZipSha256 ==
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(m195Archive.ZipFile))),
+        "actual ZIP report preserves SHA256 sidecar and exactly two M195 receipts");
+    using var m195ZipRead = System.IO.Compression.ZipFile.OpenRead(m195Archive.ZipFile);
+    Check(m195ZipRead.Entries.Count == 3 &&
+          m195ZipRead.Entries.Any(e => e.FullName == m195FirstName) &&
+          m195ZipRead.Entries.Any(e => e.FullName == "M195-Postboot-Outcome.json") &&
+          m195ZipRead.Entries.Any(e => e.FullName == "M195-Export-Manifest.json") &&
+          !m195ZipRead.Entries.Any(e => e.FullName == "UserPrivateFile.txt"),
+        "ZIP includes immutable first GPU snapshot and outcome but no unrelated files");
+    bool m195ZipRefusesOverwrite = false;
+    try { _ = await M195PostbootEvidenceExporter.ExportAsync(
+        m195ZipSource, m195ZipTx, m195ZipDest); }
+    catch (IOException) { m195ZipRefusesOverwrite = true; }
+    Check(m195ZipRefusesOverwrite,
+        "same transaction cannot silently overwrite an existing evidence ZIP");
+    Reject(() => M195PostbootEvidenceExporter.ExportAsync(
+        m195ZipSource, "not-a-transaction", m195ZipDest).GetAwaiter().GetResult(),
+        "evidence archive refuses non-GUID transaction identity");
+}
+finally
+{
+    if (Directory.Exists(m195ZipRoot))
+        Directory.Delete(m195ZipRoot, recursive: true);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
