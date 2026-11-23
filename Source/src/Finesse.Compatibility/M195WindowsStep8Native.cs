@@ -174,7 +174,7 @@ internal static class M195WindowsStep8Native
                     _signer.SignedCatalogSha256, _verified.PinnedSignTool,
                     beforePath, token);
             }
-            catch (Exception ex) when (!CriticalIntegrity(ex))
+            catch (Exception ex) when (ex is not OperationCanceledException && !CriticalIntegrity(ex))
             {
                 return await WarningAsync(folder, ex, null);
             }
@@ -197,7 +197,7 @@ internal static class M195WindowsStep8Native
                     current = registration.FinalAssessment;
                     evidence = registration.AfterEvidence;
                 }
-                catch (Exception ex) when (!CriticalIntegrity(ex))
+                catch (Exception ex) when (ex is not OperationCanceledException && !CriticalIntegrity(ex))
                 {
                     warning = "ORIGINAL_CATALOG_REGISTRATION_INCOMPLETE:" +
                         ex.GetType().Name + ":" + ex.Message;
@@ -265,9 +265,12 @@ internal static class M195WindowsStep8Native
 
         private static bool CriticalIntegrity(Exception error)
         {
+            if (error is FileNotFoundException) return true;
             if (error is not InvalidDataException) return false;
             string s = error.Message;
-            return s.StartsWith("M195_AUDIT_GRAPHICS_HASH_MISMATCH", StringComparison.Ordinal) ||
+            return s.StartsWith("M195_DUAL_TRUST_", StringComparison.Ordinal) ||
+                s.StartsWith("M195_AUDIT_CATALOG_IDENTITIES_COLLIDE", StringComparison.Ordinal) ||
+                s.StartsWith("M195_AUDIT_GRAPHICS_HASH_MISMATCH", StringComparison.Ordinal) ||
                 s.StartsWith("M195_AUDIT_MEMBER_ESCAPED_DRIVERSTORE", StringComparison.Ordinal) ||
                 s.StartsWith("M195_DRIVERSTORE_", StringComparison.Ordinal) ||
                 s.StartsWith("M195_AUDIT_CATALOG_OR_SIGNTOOL_SHA_FAILED", StringComparison.Ordinal) ||
