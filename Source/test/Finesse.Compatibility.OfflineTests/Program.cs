@@ -1704,7 +1704,7 @@ foreach (var group in new[] {
 })
 {
     string policy = M195FrozenProfileRegistryPolicies.RequireAuthorized(group.Profile);
-    Check(policy.Split('\\n').Length == group.Profile.ExpectedLenovoPolicyCount &&
+    Check(policy.Split('\n').Length == group.Profile.ExpectedLenovoPolicyCount &&
           Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
               System.Text.Encoding.Latin1.GetBytes(policy))) == group.ExpectedSha,
         "M194 frozen exact profile HKR rows match independent SHA for " + group.Profile.Id);
