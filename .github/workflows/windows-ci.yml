@@ -42,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "System dotnet unavailable" }
           dotnet run --project "Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj" --configuration Release
           if ($LASTEXITCODE -ne 0) { throw "Offline compatibility tests failed" }
+          dotnet build "Source/tools/Finesse.DatVerifier/Finesse.DatVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Offline DAT verifier tool failed to compile" }
 
   public-installer-source-gate:
     name: Full public installer (BLOCKED until redistributable source is complete)
