@@ -40,7 +40,14 @@ dotnet run --project Source/test/Finesse.Compatibility.OfflineTests/Finesse.Comp
 dotnet build Source/tools/Finesse.DatVerifier/Finesse.DatVerifier.csproj -c Release
 ```
 
-The tests cover all three exact hardware profiles, release-scoped CopyINF closure, positional DAT parsing/encoding, the recovered release-specific MetroHash64, checksum/tamper rejection, and full synthetic DAT rebuilds. Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
+The tests cover all three exact hardware profiles, release-scoped CopyINF closure, positional DAT parsing/encoding, the recovered release-specific MetroHash64, checksum/tamper rejection, and full synthetic DAT rebuilds.
+The compatibility core now also contains `AmdInfSourceRebuilder` and the combined `Amd26111CandidateRecipe`, which reconstruct the INF directly from an independently verified original AMD INF **without embedding proprietary vendor files**. Exact source and final hashes are mandatory for the known AMD 26.11.1 release.
+
+```powershell
+dotnet build Source/tools/Finesse.CandidateVerifier/Finesse.CandidateVerifier.csproj -c Release
+```
+
+For a source-driven, strictly offline INF+DAT candidate reproduction using your own authentic AMD source and authorized Lenovo policy data, see [INF and DAT integration](docs/M195-INF-DAT-INTEGRATION.md). This is a developer verification tool, **not** a driver installer. Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
 
 With the original AMD source DAT legitimately extracted, independent reviewers can reproduce the exact Go 1/Go S/Go 2 SHA-256 digests. See [offline DAT verification](docs/M195-OFFLINE-DAT-VERIFICATION.md).
 
