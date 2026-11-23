@@ -301,6 +301,76 @@ public static class M195WindowsNativeBind
     }
 
     /// <summary>
+    /// Step 9/10/11 failure recovery before the planned reboot. This is only
+    /// invoked after an actual Step8 bound receipt; no alternate driver is
+    /// selected and the original export is rehashed before any native call.
+    /// The returned receipt is not a success unless actual baseline Code0
+    /// is observed and Windows reports no pending restart.
+    /// </summary>
+    internal static async Task<RecoveryEvidence> RestoreAfterPrebootFailureAsync(
+        M195LifecycleSequence.Device device,
+        M195LifecycleSequence.BoundDriver bound,
+        M195LifecycleSequence.AssignedDriver original,
+        M195LifecycleSequence.Baseline baseline,
+        CancellationToken token = default)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Preboot recovery requires Windows.");
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(bound);
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(baseline);
+        token.ThrowIfCancellationRequested();
+        if (device.Profile != HandheldProfiles.Resolve(device.ExactHardwareId) ||
+            !bound.SignedOnce ||
+            !string.Equals(bound.TargetDriverVersion,
+                OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+                StringComparison.Ordinal))
+            throw new InvalidDataException("M195_PREBOOT_RECOVERY_TARGET_PROFILE_INVALID");
+
+        // Verify backup contents before asking SetupAPI/NewDev to change any
+        // device. No backup is permitted to produce a fabricated Code0.
+        string? savedInf = VerifyRecoveryExport(original, baseline);
+        var observed = M195WindowsGpuInventory.RequireUniqueExactGpu(
+            await M195WindowsGpuInventory.EnumerateAsync(token));
+        if (observed.Profile != device.Profile ||
+            !string.Equals(observed.Display.InstanceId, device.InstanceId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("M195_PREBOOT_RECOVERY_DEVICE_CHANGED");
+        bool targetAssigned = string.Equals(observed.Display.PublishedInf,
+            bound.PublishedInf, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(observed.Display.Version, bound.TargetDriverVersion,
+                StringComparison.Ordinal);
+        bool baselineAssigned = string.Equals(observed.Display.PublishedInf,
+            original.PublishedInf, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(observed.Display.Version, original.Version,
+                StringComparison.Ordinal);
+        if (!targetAssigned && !baselineAssigned)
+            throw new InvalidDataException("M195_PREBOOT_RECOVERY_UNKNOWN_ACTIVE_DRIVER");
+        if (baselineAssigned && observed.Display.ProblemCode == 0)
+            return new RecoveryEvidence(true, 0, false,
+                observed.Display.PublishedInf, observed.Display.Version,
+                observed.Display.ProblemCode, true,
+                "RECOVERY_VERIFIED_CODE0_BASELINE");
+        string? hardwareId = observed.Display.HardwareIds.FirstOrDefault(h =>
+            string.Equals(h, device.ExactHardwareId, StringComparison.OrdinalIgnoreCase));
+        if (hardwareId is null && device.Profile == HandheldProfiles.Go1)
+        {
+            string revisionless = device.ExactHardwareId[
+                ..device.ExactHardwareId.IndexOf("&REV_", StringComparison.Ordinal)];
+            hardwareId = observed.Display.HardwareIds.FirstOrDefault(h =>
+                string.Equals(h, revisionless, StringComparison.OrdinalIgnoreCase));
+        }
+        if (hardwareId is null)
+            throw new InvalidDataException("M195_PREBOOT_RECOVERY_EXACT_HARDWARE_ID_MISSING");
+        var plan = new BindPlan(device.InstanceId, hardwareId,
+            M195WindowsBindIdentity.RequirePublishedOemInf(bound.PublishedInf),
+            M195WindowsBindIdentity.RequirePublishedOemInf(original.PublishedInf),
+            original.Version, device.Profile);
+        return await TryRestoreAsync(plan, savedInf);
+    }
+
+    /// <summary>
     /// Recovery after first durable postboot snapshot. The caller must have
     /// proved a genuine new boot, and exactly the physical target display.
     /// Reuses frozen M180 recovery export SHA manifest and active Code 0
