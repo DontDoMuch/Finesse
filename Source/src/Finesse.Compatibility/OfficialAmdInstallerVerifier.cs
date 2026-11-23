@@ -123,8 +123,10 @@ public static class OfficialAmdInstallerVerifier
         }
         catch (CryptographicException)
         {
-            // A missing/unreadable signer identity must fail the caller's gate.
-            return (unchecked((int)0x800B0100), string.Empty, string.Empty);
+            // Some Windows binaries are catalog-signed without an embedded
+            // signer. Preserve the REAL WinVerifyTrust result for diagnostics;
+            // the AMD source gate still rejects absent signer identity.
+            return (status, string.Empty, string.Empty);
         }
         finally
         {
