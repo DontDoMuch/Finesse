@@ -1189,6 +1189,34 @@ foreach (HandheldProfile profile in new[] {
         device, baselineAssigned, gpu, "oem91.inf", profile.HardwareId,
         device.InstanceId, infText.Replace(profile.InstallSection, "wrong_section")),
         "native NewDev plan rejects wrong INF install section " + profile.Id);
+
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, false, plan, gpu) == "RECOVERY_VERIFIED_CODE0_BASELINE",
+        "M180 rollback requires original active INF/version/device and Code0 " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, true, plan, gpu) == "RECOVERY_PENDING_RESTART_UNVERIFIED",
+        "M180 rollback Code0 with pending reboot remains UNVERIFIED " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        false, false, plan, gpu) == "RECOVERY_BIND_API_FAILED",
+        "M180 rollback failed API cannot be claimed healthy " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, false, plan, null) == "RECOVERY_DEVICE_NOT_OBSERVED",
+        "M180 rollback missing GPU observation is not healthy " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, false, plan,
+        gpu with { Display = display with { ProblemCode = 43 } }) ==
+            "RECOVERY_DEVICE_PROBLEM",
+        "M180 rollback Code43 is never a recovered Code0 baseline " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, false, plan,
+        gpu with { Display = display with { Version = "0.0.0.0" } }) ==
+            "RECOVERY_BASELINE_MISMATCH",
+        "M180 rollback wrong driver version is not recovery " + profile.Id);
+    Check(M195WindowsNativeBind.ClassifyRecovery(
+        true, false, plan,
+        gpu with { Display = display with { InstanceId = "PCI\\DRIFT" } }) ==
+            "RECOVERY_DEVICE_ID_MISMATCH",
+        "M180 rollback altered GPU instance is not recovery " + profile.Id);
 }
 
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
