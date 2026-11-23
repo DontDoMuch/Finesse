@@ -1219,6 +1219,88 @@ foreach (HandheldProfile profile in new[] {
         "M180 rollback altered GPU instance is not recovery " + profile.Id);
 }
 
+
+// M195 production Step8 ordering: fake phases only. These fixtures never
+// sign, stage or bind drivers on the Windows CI runner.
+foreach (HandheldProfile testedProfile in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    var step8Context = new M195Step8Sequence.Context(
+        new L.Device("PCI\\STEP8_TEST", testedProfile.HardwareId, testedProfile),
+        new L.AssignedDriver("oem42.inf", "32.0.32015.7029", 0,
+            true, "healthy"),
+        new L.Baseline("FAKE_VERIFIED_EXPORT", true, "oem42.inf"));
+    var step8Fake = new FakeStep8Phases();
+    var step8Result = await M195Step8Sequence.ExecuteAsync(step8Context, step8Fake);
+    Check(step8Fake.Calls.SequenceEqual(new[] {
+            "Sign", "Stage", "Bind", "Audit" }) &&
+          step8Result.Bound.DualTrustedCriticalFiles == 14 &&
+          step8Result.Bound.SignedOnce &&
+          step8Result.Trust.FullDualTrustVerified,
+        "Step8 fake orders sign-stage-bind-audit and returns measured 14x4 " + testedProfile.Id);
+
+    var step8Partial = new FakeStep8Phases { AuditIncomplete = true };
+    var partialResult = await M195Step8Sequence.ExecuteAsync(step8Context, step8Partial);
+    Check(partialResult.Bound.DualTrustedCriticalFiles == 0 &&
+          !partialResult.Trust.FullDualTrustVerified &&
+          partialResult.Trust.Warning is not null &&
+          !step8Partial.Calls.Contains("Recover"),
+        "incomplete optional M191 dual-trust evidence is disclosed but not blanket blocker " +
+        testedProfile.Id);
+
+    var step8AuditFailure = new FakeStep8Phases { AuditThrowsCritical = true };
+    Reject(() => M195Step8Sequence.ExecuteAsync(
+        step8Context, step8AuditFailure).GetAwaiter().GetResult(),
+        "critical postbind AMD catalog/source corruption triggers failure " + testedProfile.Id);
+    Check(step8AuditFailure.Calls.SequenceEqual(new[] {
+            "Sign", "Stage", "Bind", "Audit", "Recover" }),
+        "critical postbind audit failure attempts observed baseline recovery " + testedProfile.Id);
+
+    var step8InvalidStage = new FakeStep8Phases { StageInvalid = true };
+    Reject(() => M195Step8Sequence.ExecuteAsync(
+        step8Context, step8InvalidStage).GetAwaiter().GetResult(),
+        "invalid SetupAPI stage receipt refused before driver bind " + testedProfile.Id);
+    Check(!step8InvalidStage.Calls.Contains("Bind") &&
+          !step8InvalidStage.Calls.Contains("Recover"),
+        "failed staging cannot trigger a fake postbind rollback " + testedProfile.Id);
+
+    var step8BadSigner = new FakeStep8Phases { SignInvalid = true };
+    Reject(() => M195Step8Sequence.ExecuteAsync(
+        step8Context, step8BadSigner).GetAwaiter().GetResult(),
+        "signer must retain trust and evidence before stage " + testedProfile.Id);
+    Check(step8BadSigner.Calls.SequenceEqual(new[] { "Sign" }),
+        "signing refusal cannot proceed to stage or bind " + testedProfile.Id);
+
+    var step8WrongAssignment = new FakeStep8Phases { WrongBoundVersion = true };
+    Reject(() => M195Step8Sequence.ExecuteAsync(
+        step8Context, step8WrongAssignment).GetAwaiter().GetResult(),
+        "wrong assigned active driver version rejected after NewDev " + testedProfile.Id);
+    Check(step8WrongAssignment.Calls.Contains("Recover") &&
+          !step8WrongAssignment.Calls.Contains("Audit"),
+        "wrong active binding recovered before optional dual-trust audit " + testedProfile.Id);
+}
+var step8Go1BrokenBaseline = new M195Step8Sequence.Context(
+    new L.Device("PCI\\GO1_BROKEN", HandheldProfiles.Go1.HardwareId, HandheldProfiles.Go1),
+    new L.AssignedDriver("oem2.inf", "32.0.23044.19", 43,
+        false, "broken initial GPU"),
+    new L.Baseline(null, false, null));
+var optionalGo1Result = await M195Step8Sequence.ExecuteAsync(
+    step8Go1BrokenBaseline, new FakeStep8Phases());
+Check(optionalGo1Result.VerifiedPrebootAssignment,
+    "frozen Go1 path retains optional recovery export for broken initial GPU");
+var go2WithoutBackup = new M195Step8Sequence.Context(
+    new L.Device("PCI\\GO2_BROKEN", HandheldProfiles.Go2.HardwareId, HandheldProfiles.Go2),
+    new L.AssignedDriver("oem2.inf", "32.0.23044.19", 43,
+        false, "broken initial GPU"),
+    new L.Baseline(null, false, null));
+var missingBackupFake = new FakeStep8Phases();
+Reject(() => M195Step8Sequence.ExecuteAsync(
+    go2WithoutBackup, missingBackupFake).GetAwaiter().GetResult(),
+    "Go2 tester must retain frozen verified recovery baseline requirement");
+Check(missingBackupFake.Calls.Count == 0,
+    "Go2 missing backup prevents signing, staging or any mutation");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
@@ -1368,5 +1450,61 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     {
         Calls.Add("RecoverPostboot");
         return Task.FromResult(new L.RecoveryResult(true, pending.OriginalPublishedInf, 0));
+    }
+}
+
+sealed class FakeStep8Phases : M195Step8Sequence.IActions
+{
+    public List<string> Calls { get; } = [];
+    public bool SignInvalid { get; init; }
+    public bool StageInvalid { get; init; }
+    public bool WrongBoundVersion { get; init; }
+    public bool AuditIncomplete { get; init; }
+    public bool AuditThrowsCritical { get; init; }
+
+    public Task<M195Step8Sequence.SignedPackage> SignOnceAsync(
+        CancellationToken token)
+    {
+        Calls.Add("Sign");
+        return Task.FromResult(new M195Step8Sequence.SignedPackage(
+            new string('A', 64), !SignInvalid, true));
+    }
+
+    public Task<M195Step8Sequence.StagedPackage> StageAsync(
+        M195Step8Sequence.SignedPackage signed, CancellationToken token)
+    {
+        Calls.Add("Stage");
+        return Task.FromResult(new M195Step8Sequence.StagedPackage(
+            "oem91.inf", signed.CatalogSha256, !StageInvalid));
+    }
+
+    public Task<M195Step8Sequence.BoundAssignment> BindAsync(
+        M195Step8Sequence.StagedPackage staged, CancellationToken token)
+    {
+        Calls.Add("Bind");
+        return Task.FromResult(new M195Step8Sequence.BoundAssignment(
+            staged.PublishedInf,
+            WrongBoundVersion ? "0.0.0.0" :
+                OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+            43, true, true));
+    }
+
+    public Task<M195Step8Sequence.TrustEvidence> AuditAndRegisterOriginalAsync(
+        M195Step8Sequence.BoundAssignment bound, CancellationToken token)
+    {
+        Calls.Add("Audit");
+        if (AuditThrowsCritical)
+            throw new InvalidDataException("M195_AUDIT_GRAPHICS_HASH_MISMATCH");
+        return Task.FromResult(new M195Step8Sequence.TrustEvidence(
+            14, 14, AuditIncomplete ? 13 : 14, 14,
+            !AuditIncomplete, true, "FAKE_STEP8_AUDIT",
+            AuditIncomplete ? "M191 registration unverified" : null));
+    }
+
+    public Task RestoreAfterPostBindFailureAsync(
+        M195Step8Sequence.BoundAssignment bound, Exception originalError)
+    {
+        Calls.Add("Recover");
+        return Task.CompletedTask;
     }
 }
