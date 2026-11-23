@@ -35,6 +35,18 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           global-json-file: global.json
+      - name: Confirm public AMD original manifest is present (metadata only)
+        shell: powershell
+        run: |
+          $manifest = 'Source/contracts/releases/amd-26.11.1-original-194.sha256'
+          if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            throw 'Required public 194-file source inventory missing.'
+          }
+          $rows = @(Get-Content -LiteralPath $manifest)
+          if ($rows.Count -ne 194) {
+            throw "Expected 194 original AMD name/hash entries, got $($rows.Count)."
+          }
+          Write-Host 'M195_PUBLIC_ORIGINAL_SOURCE_METADATA_194_PRESENT'
       - name: Run vendor-independent profile and DAT payload tests
         shell: powershell
         run: |
