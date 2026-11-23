@@ -129,7 +129,9 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
                 try
                 {
                     _ = await M195PostbootEvidenceExporter.ExportAsync(
-                        reports, state.Pending.TransactionId, token: CancellationToken.None);
+                        reports, state.Pending.TransactionId,
+                        token: CancellationToken.None,
+                        prebootSessionDirectory: state.SourceSessionWorkspace);
                 }
                 catch { /* original failure and first snapshot remain immutable */ }
             }
@@ -154,12 +156,15 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
         {
             M195PostbootEvidenceExporter.ExportResult exported =
                 await M195PostbootEvidenceExporter.ExportAsync(
-                    reports, state.Pending.TransactionId, token: CancellationToken.None);
+                    reports, state.Pending.TransactionId,
+                    token: CancellationToken.None,
+                    prebootSessionDirectory: state.SourceSessionWorkspace);
             await M195WindowsPostbootRegistration.WriteNewAsync(
                 Path.Combine(reports, "M195-ReportExport.json"), new {
                     Schema = "Finesse.M195.PostbootReportExport.v1",
                     exported.ZipFile, exported.ZipSha256,
-                    exported.FilesIncluded, exported.Sha256Sidecar
+                    exported.FilesIncluded, exported.PrebootFilesIncluded,
+                    exported.Sha256Sidecar
                 }, CancellationToken.None);
         }
         catch (Exception reportError)
