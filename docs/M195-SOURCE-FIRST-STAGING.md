@@ -30,7 +30,7 @@ Sort rows by relative path using a case-insensitive ordinal comparison, encode A
 | Rebuilt Go S Z1 Extreme candidate | `D81432A1469DC04FFCCAE072EBE0E3B064A6DFF9E9949EFF92FA035ED8A49F1B` |
 | Rebuilt Go 2 Z2 Extreme candidate | `B5F1C78B9B929ADCE7C5BDDD54CD3A2FA03911A2117159E63266D67CA7B7E369` |
 
-The manifest contains only file paths and hashes, not vendor content. **The full public selection/manifest has not yet been published**; until then, the pinned source-first CLI is available for engineering validation with the original authoritative manifest, not yet a self-contained third-party build workflow. Supplying a forged or incomplete manifest will fail the source inventory gate.
+The manifest contains only file paths and hashes, not vendor content. **The exact 194-line filename/SHA-256 manifest is now published** at [`Source/contracts/releases/amd-26.11.1-original-194.sha256`](../Source/contracts/releases/amd-26.11.1-original-194.sha256). No AMD binary bytes are included. Supplying a forged or incomplete manifest fails the pinned original source identity check. The actual original AMD INF/DAT/binaries and the profile policy data still must be obtained legitimately and separately.
 
 ## System-installed .NET 10 compilation
 
@@ -49,7 +49,7 @@ These arguments must refer to files you have lawfully acquired and independently
 ```powershell
 dotnet run --project Source/tools/Finesse.SourceFirstVerifier/Finesse.SourceFirstVerifier.csproj -c Release -- `
   --display-root "C:\PATH\TO\Packages\Drivers\Display\WT6A_INF" `
-  --source-manifest "C:\PATH\TO\verified-original-194.sha256" `
+  --source-manifest "Source/contracts/releases/amd-26.11.1-original-194.sha256" `
   --lenovo-policy "C:\PATH\TO\authorized-go1-policy.txt" `
   --profile Go1 `
   --output-dir "C:\PATH\TO\NEW\unsigned-candidate-Go1"
@@ -73,6 +73,6 @@ M195 needs this exact reordering:
 6. **Regenerate and sign** the new main catalog; verify original AMD catalog and 14/14 dual coverage, scoped cleanup, and staging/binding
 7. Install and verify AMD Software **before** one planned reboot, with first postboot observation prior to any recovery
 
-**Not complete:** The old GUI/pipeline refactor, publishable source-selection manifest, legally redistributable registry-policy source, official signature-verification wiring, catalog generation, installer/rollback integration, and physical M195 testing. Do not claim the public end-user installer has passed CI yet.
+**Not complete:** The old GUI/pipeline refactor, legally redistributable registry-policy source, official signature-verification wiring, catalog generation, installer/rollback integration, and physical M195 testing. Do not claim the public end-user installer has passed CI yet.
 
 Frozen M194 is preserved. The existing Code 0 Go 1 / Go 2 hardware evidence belongs to M193/M194, **not to M195**.
