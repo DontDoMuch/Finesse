@@ -920,6 +920,71 @@ if (OperatingSystem.IsWindows())
         "live signer refuses a previously signed or reused catalog");
 }
 
+
+// Parse-only test of the actual PowerShell 5.1 script embedded in the M179
+// live-signing port. Never executes New-SelfSignedCertificate or SignTool.
+if (OperatingSystem.IsWindows())
+{
+    var signerType = typeof(M195LiveSigningPreflight).Assembly.GetType(
+        "Finesse.Compatibility.M195LiveCatalogSigner", throwOnError: true)!;
+    var scriptConstant = signerType.GetField("Script",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+    string embeddedScript = scriptConstant?.GetRawConstantValue() as string ??
+        throw new InvalidOperationException("Live signer PowerShell source missing.");
+    string parseRoot = Path.Combine(Path.GetTempPath(),
+        "Finesse-M195-SignerParse-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(parseRoot);
+    try
+    {
+        string signerScript = Path.Combine(parseRoot, "read-only-signer-source.ps1");
+        File.WriteAllText(signerScript, embeddedScript);
+        string parser = Path.Combine(parseRoot, "parse-only.ps1");
+        File.WriteAllText(parser,
+            "$ErrorActionPreference='Stop'\r\n" +
+            "$tokens=$null; $parseErrors=$null\r\n" +
+            "[void][System.Management.Automation.Language.Parser]::ParseFile(" +
+            "$env:FINESSE_M195_SCRIPT_PARSE_TARGET,[ref]$tokens,[ref]$parseErrors)\r\n" +
+            "if(@($parseErrors).Count -ne 0){" +
+            "foreach($entry in @($parseErrors)){Write-Output $entry.ToString()}; exit 1}\r\n" +
+            "Write-Output 'M195_PS51_SCRIPT_PARSE_PASS'\r\n");
+        var psi = new System.Diagnostics.ProcessStartInfo(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "powershell.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.Environment["FINESSE_M195_SCRIPT_PARSE_TARGET"] = signerScript;
+        foreach (string argument in new[] {
+            "-NoLogo", "-NoProfile", "-NonInteractive",
+            "-File", parser })
+            psi.ArgumentList.Add(argument);
+        using var parseProcess = System.Diagnostics.Process.Start(psi) ??
+            throw new InvalidOperationException("Unable to start Windows PowerShell parser.");
+        string parseStdout = await parseProcess.StandardOutput.ReadToEndAsync();
+        string parseStderr = await parseProcess.StandardError.ReadToEndAsync();
+        if (!parseProcess.WaitForExit(20_000))
+        {
+            parseProcess.Kill(entireProcessTree: true);
+            throw new InvalidOperationException("PowerShell parser timed out.");
+        }
+        Check(parseProcess.ExitCode == 0 &&
+              parseStdout.Contains("M195_PS51_SCRIPT_PARSE_PASS", StringComparison.Ordinal),
+              "M179-derived retained installation signer parses in real Windows PowerShell 5.1");
+        Check(embeddedScript.Contains("LocalMachine", StringComparison.Ordinal) &&
+              embeddedScript.Contains("New-SelfSignedCertificate", StringComparison.Ordinal) &&
+              embeddedScript.Contains("TrustedPublisher", StringComparison.Ordinal) &&
+              embeddedScript.Contains("M195-SignTool-VerifyINF.txt", StringComparison.Ordinal),
+              "retained signer includes source-derived trust, SignTool and INF membership evidence");
+    }
+    finally
+    {
+        Directory.Delete(parseRoot, recursive: true);
+    }
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
