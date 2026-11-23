@@ -376,27 +376,7 @@ internal static class M195WindowsPostbootRegistration
               throw 'M195_STEP12_TASK_CLEANUP_IDENTITY_MISMATCH'
             }
             $taskSid=[string]$task.Principal.UserId
-            if($taskSid -notmatch '^S-1-\d+(?:-\d+)+
-    {
-        using var f = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(f));
-    }
-    private static void RequireNoReparse(string path)
-    {
-        string? cursor = Path.GetFullPath(path);
-        while (!string.IsNullOrEmpty(cursor))
-        {
-            if ((File.Exists(cursor) || Directory.Exists(cursor)) &&
-                (File.GetAttributes(cursor) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidDataException("M195_POSTBOOT_REPARSE_PATH_REJECTED");
-            string? parent = Path.GetDirectoryName(cursor);
-            if (string.Equals(cursor, parent, StringComparison.OrdinalIgnoreCase))
-                break;
-            cursor = parent;
-        }
-    }
-}
-) {
+            if($taskSid -notmatch '^S-1-\d+(?:-\d+)+$') {
               $taskSid=([Security.Principal.NTAccount]::new($taskSid)).Translate(
                 [Security.Principal.SecurityIdentifier]).Value
             }
