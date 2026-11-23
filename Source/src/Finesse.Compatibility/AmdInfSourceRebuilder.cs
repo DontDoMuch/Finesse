@@ -15,8 +15,6 @@ public static class AmdInfSourceRebuilder
     private const string Annotation = "\r\n; Finesse M159 private offline 26.11.1 device profile - no install authorization\r\n\r\n";
     private static readonly string[] ClonedSuffixes =
         ["", ".Services", ".HW", ".Software", ".Components", ".GeneralConfigData"];
-    private const string OriginalOfficial26111InfSha =
-        "2E1125EB79359D3BAEB283B81868064257C5F1436D8928AC2EC123837DD70C57";
     private const string CopyCp = "CopyINF = .\\amdcp\\amdcp.inf\r\n";
     private const string CopyUw = "CopyINF=amduw23e.inf\r\n";
 
@@ -36,7 +34,7 @@ public static class AmdInfSourceRebuilder
         ArgumentNullException.ThrowIfNull(officialInf);
         ArgumentNullException.ThrowIfNull(profile);
         string originalHash = Sha256(officialInf);
-        if (!string.Equals(originalHash, OriginalOfficial26111InfSha, StringComparison.Ordinal))
+        if (!string.Equals(originalHash, OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalInfSha256, StringComparison.Ordinal))
             throw new InvalidDataException("AMD_26111_OFFICIAL_INF_SOURCE_HASH_MISMATCH");
 
         string preHash = profile.Id switch
