@@ -16,7 +16,7 @@ public sealed record HandheldProfile(
 public static class HandheldProfiles
 {
     public static readonly HandheldProfile Go1 = new(
-        "LegionGo1-Z1Extreme",
+        "LegionGo1",
         @"PCI\VEN_1002&DEV_15BF&SUBSYS_381217AA&REV_04",
         0x15BF, 0x04,
         "Phoenix",
