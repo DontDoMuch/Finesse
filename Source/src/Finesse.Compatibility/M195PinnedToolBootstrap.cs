@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
@@ -59,10 +60,32 @@ internal static class M195PinnedToolBootstrap
         new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
             "c/bin/10.0.28000.0/x86/Inf2Cat.exe",
             "m8-toolchain/extracted-tools/WDK-28000/x86/Inf2Cat.exe",
-            34_880, "82C302FC9069783674B51665CE80E769F8500DB7FC737A4B8A3773C521950B86")
+            34_880, "82C302FC9069783674B51665CE80E769F8500DB7FC737A4B8A3773C521950B86"),
+        new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
+            "c/bin/10.0.28000.0/x86/Microsoft.UniversalStore.HardwareWorkflow.Cabinets.dll",
+            "m8-toolchain/extracted-tools/WDK-28000/x86/Microsoft.UniversalStore.HardwareWorkflow.Cabinets.dll",
+            60_480, "E967F7CBE45367A854A69FE7178CE374FAC570D2D1CFFFEA5525697890B8EB93"),
+        new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
+            "c/bin/10.0.28000.0/x86/Microsoft.UniversalStore.HardwareWorkflow.Catalogs.dll",
+            "m8-toolchain/extracted-tools/WDK-28000/x86/Microsoft.UniversalStore.HardwareWorkflow.Catalogs.dll",
+            33_344, "EB5C35941565E42FFCCB943969443E69A5A520D79D86E32E910B323BCDB41920"),
+        new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
+            "c/bin/10.0.28000.0/x86/Microsoft.UniversalStore.HardwareWorkflow.InfReader.dll",
+            "m8-toolchain/extracted-tools/WDK-28000/x86/Microsoft.UniversalStore.HardwareWorkflow.InfReader.dll",
+            60_480, "9C14A7866F4E3EDFDA382E57A8E585462E69DE1F50DFFF6351D32934A6C1FF95"),
+        new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
+            "c/bin/10.0.28000.0/x86/Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll",
+            "m8-toolchain/extracted-tools/WDK-28000/x86/Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll",
+            144_960, "E8D61F87E041C5EF6E10408CABE344457A4607D75997965077810B5862C0B4B7")
     ];
 
     internal static IReadOnlyList<Pin> FrozenDownloadPins => Downloads.AsReadOnly();
+    internal static int RequiredPortableInf2CatFiles => Members.Count(
+        item => item.MemberName.StartsWith("c/bin/10.0.28000.0/x86/",
+            StringComparison.Ordinal) && item.MemberName.EndsWith(".dll",
+            StringComparison.OrdinalIgnoreCase) ||
+        item.MemberName.Equals("c/bin/10.0.28000.0/x86/Inf2Cat.exe",
+            StringComparison.OrdinalIgnoreCase));
 
     internal static async Task<Tools> EnsureAsync(
         string? cacheRoot, IProgress<string>? progress,
@@ -156,11 +179,66 @@ internal static class M195PinnedToolBootstrap
             Path.DirectorySeparatorChar));
         if (!await ExactAsync(SevenZr(), Downloads[0].Bytes, Downloads[0].Sha256, token) ||
             !await ExactAsync(Zip26(), Downloads[3].Bytes, Downloads[3].Sha256, token) ||
-            !await ExactAsync(Sign(), Members[0].ExactBytes, Members[0].ExactSha256, token) ||
-            !await ExactAsync(Inf(), Members[1].ExactBytes, Members[1].ExactSha256, token))
+            !await ExactAsync(Sign(), Members[0].ExactBytes, Members[0].ExactSha256, token))
             throw new InvalidDataException("M195_TOOLCHAIN_FINAL_VERIFICATION_FAILED");
-        progress?.Report("Verified Windows driver tools");
+        // M195 hardware-test discovery, 2026-11-23: Inf2Cat.exe alone exits
+        // -1 with a missing SubmissionBuilder assembly. Require ALL FOUR
+        // companion Microsoft DLLs from the SAME pinned WDK NuGet archive.
+        // Old caches containing only Inf2Cat.exe are automatically completed.
+        foreach (Member member in Members.Skip(1))
+        {
+            string file = Path.Combine(root, member.Destination.Replace('/',
+                Path.DirectorySeparatorChar));
+            if (!await ExactAsync(file, member.ExactBytes, member.ExactSha256, token))
+                throw new InvalidDataException(
+                    "M195_INF2CAT_DEPENDENCY_SHA_MISSING_OR_CHANGED_" +
+                    Path.GetFileName(file));
+        }
+        await ProbeInf2CatAsync(Inf(), token);
+        progress?.Report("Verified portable Windows driver tools and all Inf2Cat assemblies");
         return new Tools(SevenZr(), Inf(), Sign(), Zip26(), root);
+    }
+
+    private static async Task ProbeInf2CatAsync(string path, CancellationToken token)
+    {
+        var launch = new ProcessStartInfo(path)
+        {
+            WorkingDirectory = Path.GetDirectoryName(path)!,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        launch.ArgumentList.Add("/?");
+        using var proc = Process.Start(launch) ??
+            throw new IOException("M195_INF2CAT_PORTABLE_PROBE_PROCESS_FAILED");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            Task<string> stdout = proc.StandardOutput.ReadToEndAsync(timeout.Token);
+            Task<string> stderr = proc.StandardError.ReadToEndAsync(timeout.Token);
+            await Task.WhenAll(stdout, stderr, proc.WaitForExitAsync(timeout.Token));
+            string message = stdout.Result + "\n" + stderr.Result;
+            if (proc.ExitCode != 0 ||
+                message.Contains("Could not load file or assembly",
+                    StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("FileNotFoundException",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !message.Contains("Inf2Cat", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "M195_INF2CAT_PORTABLE_RUNTIME_PROBE_FAILED_EXIT_" + proc.ExitCode);
+        }
+        catch
+        {
+            if (!proc.HasExited)
+            {
+                try { proc.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { }
+                await proc.WaitForExitAsync(CancellationToken.None);
+            }
+            throw;
+        }
     }
 
     private static async Task DownloadOneAsync(
