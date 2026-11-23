@@ -31,6 +31,19 @@ The M195 branch also includes `global.json` selecting an installed .NET 10 SDK w
 
 **Current behavior:** The script intentionally fails with `M195_PUBLIC_SOURCE_NOT_PUBLISHED` while the full public source is absent. The Windows CI workflow calls the same script and cannot legitimately succeed or publish an executable until that blocker and the private-resource guards are resolved. The presence of a workflow file alone is not CI build proof. See [source audit](docs/M195-SOURCE-AUDIT.md).
 
+## Available now: independently buildable compatibility core
+
+Although the **full installer is not yet publicly buildable**, M195 includes an independently compilable, vendor-binary-free compatibility library and offline DAT verifier. These use your **globally installed .NET 10 SDK**, not a portable SDK.
+
+```powershell
+dotnet run --project Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj -c Release
+dotnet build Source/tools/Finesse.DatVerifier/Finesse.DatVerifier.csproj -c Release
+```
+
+The tests cover all three exact hardware profiles, release-scoped CopyINF closure, positional DAT parsing/encoding, the recovered release-specific MetroHash64, checksum/tamper rejection, and full synthetic DAT rebuilds. Both build/test commands run in a separate **offline compatibility core** CI job. That job passing proves compilation and those tests—not a complete GUI installer build or successful GPU installation.
+
+With the original AMD source DAT legitimately extracted, independent reviewers can reproduce the exact Go 1/Go S/Go 2 SHA-256 digests. See [offline DAT verification](docs/M195-OFFLINE-DAT-VERIFICATION.md).
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
