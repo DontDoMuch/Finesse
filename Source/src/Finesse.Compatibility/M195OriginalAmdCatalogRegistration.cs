@@ -34,6 +34,7 @@ internal static class M195OriginalAmdCatalogRegistration
     /// Microsoft catalog database files are never overwritten or removed.
     /// </summary>
     internal static async Task<Result> EnsureOriginalRegisteredAsync(
+        M195LifecycleSequence.Device expectedDevice,
         string publishedInf, string preparedCandidateRoot, string originalAmdCatalog,
         string signedLocalCatalogSha256, string verifiedSignToolExe,
         string freshEvidenceDirectory, CancellationToken token = default)
@@ -57,7 +58,7 @@ internal static class M195OriginalAmdCatalogRegistration
         string receipt = Path.Combine(folder, "M195-OfficialCatalogRegistration.json");
 
         var previous = await M195WindowsDualCatalogAudit.CaptureAsync(
-            publishedInf, preparedCandidateRoot, originalAmdCatalog,
+            expectedDevice, publishedInf, preparedCandidateRoot, originalAmdCatalog,
             signedLocalCatalogSha256, verifiedSignToolExe, before, token);
         var d = previous.Assessment;
         if (d.OriginalCoverage != 14 || !previous.Snapshot.OriginalCatalogAuthenticodeWhcp ||
@@ -97,7 +98,7 @@ internal static class M195OriginalAmdCatalogRegistration
         // Re-enumerate every critical member: successful AddCatalog alone is
         // insufficient; each installed AMD file must resolve to this CAT.
         var following = await M195WindowsDualCatalogAudit.CaptureAsync(
-            publishedInf, preparedCandidateRoot, originalAmdCatalog,
+            expectedDevice, publishedInf, preparedCandidateRoot, originalAmdCatalog,
             signedLocalCatalogSha256, verifiedSignToolExe, after, token);
         var done = following.Assessment;
         string summary = JsonSerializer.Serialize(new {
