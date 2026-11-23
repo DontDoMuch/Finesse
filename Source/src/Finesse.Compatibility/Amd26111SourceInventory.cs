@@ -22,7 +22,7 @@ public static class Amd26111SourceInventory
     // line SHA256 + two spaces + exact relative path + LF, including last LF.
     // This is a fingerprint of file NAMES/HASHES, not any vendor file bytes.
     public const string PinnedOriginalManifestSha256 =
-        "C7757CFE6D743D7A6AAC33292753FEB08811CA898A43BF60B724481E24042D08";
+        "8776BD900A0B669D03F8DF308B9BB5F4B323DE90C5E699D8837765AD719D7C64";
 
     public static AmdVerifiedSourceInventory ParsePinned26111(string manifestText) =>
         ParseAndVerify(manifestText,
@@ -124,9 +124,9 @@ public static class Amd26111SourceInventory
     public static string PinnedCandidateManifestHash(HandheldProfile profile) =>
         profile.Id switch
         {
-            "LegionGo1" => "6F2533085DF9656AE168AF7D95D490E333B338D1D9181DD3C8B32A24A90A7944",
-            "LegionGoS-Z1Extreme" => "D81432A1469DC04FFCCAE072EBE0E3B064A6DFF9E9949EFF92FA035ED8A49F1B",
-            "LegionGo2-Z2Extreme" => "B5F1C78B9B929ADCE7C5BDDD54CD3A2FA03911A2117159E63266D67CA7B7E369",
+            "LegionGo1" => "00A7F9DF1BC365C4D996100D70EE85B1E945C8BA44753A8B008C00F7184298E7",
+            "LegionGoS-Z1Extreme" => "FB4647C4EFB8F8FCCD237938B68CA4C93D15182BE05BCB2875ABFE1F20F1098F",
+            "LegionGo2-Z2Extreme" => "0C08A5A88A17CFF1C62AC0A8B035F67F78DD2B11F861512B13E8970F965EE17A",
             _ => throw new InvalidDataException("AMD_CANDIDATE_UNSUPPORTED_PROFILE")
         };
 
