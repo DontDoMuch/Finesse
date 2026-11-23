@@ -2,6 +2,25 @@ using System.Buffers.Binary;
 using Finesse.Compatibility;
 using L = Finesse.Compatibility.M195LifecycleSequence;
 
+// Invoked ONLY from the dedicated Windows toolchain smoke workflow, never
+// the default 374 source-only tests. No driver, certificate, GPU, MSI or
+// reboot action. This actually downloads/verifies the frozen Microsoft tools
+// and starts the self-contained portable Inf2Cat.exe with all dependencies.
+if (args.Length == 1 && args[0] == "--pinned-tool-runtime-probe")
+{
+    M195PinnedToolBootstrap.Tools tools =
+        await M195PinnedToolBootstrap.EnsureAsync(
+            cacheRoot: null, new Progress<string>(Console.WriteLine));
+    if (M195PinnedToolBootstrap.RequiredPortableInf2CatFiles != 5 ||
+        !File.Exists(tools.Inf2CatExe) ||
+        !File.Exists(Path.Combine(Path.GetDirectoryName(tools.Inf2CatExe)!,
+            "Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll")))
+        throw new InvalidDataException(
+            "M195_RUNTIME_PROBE_MISSING_PINNED_INF2CAT_DEPENDENCIES");
+    Console.WriteLine("M195_RUNTIME_PINNED_INF2CAT_PASS");
+    return;
+}
+
 // Vendor-independent synthetic fixtures. These tests do not assert a valid
 // release-specific MetroHash header or GPU driver installation success.
 int passed = 0;
@@ -1755,7 +1774,8 @@ foreach (var group in new[] {
               System.Text.Encoding.Latin1.GetBytes(policy))) == group.ExpectedSha,
         "M194 frozen exact profile HKR rows match independent SHA for " + group.Profile.Id);
 }
-Check(M195PinnedToolBootstrap.FrozenDownloadPins.Count == 4 &&
+Check(M195PinnedToolBootstrap.RequiredPortableInf2CatFiles == 5 &&
+      M195PinnedToolBootstrap.FrozenDownloadPins.Count == 4 &&
       M195PinnedToolBootstrap.FrozenDownloadPins.All(x =>
           x.Url.StartsWith("https://", StringComparison.Ordinal) &&
           x.Sha256.Length == 64) &&
