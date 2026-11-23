@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>Finesse</AssemblyName>
+    <Product>Finesse</Product>
+    <Title>Finesse</Title>
+    <Description>BYOF Finesse AMD driver installer</Description>
+    <RootNamespace>Finesse.WindowsHost</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Finesse.Compatibility/Finesse.Compatibility.csproj" />
+    <EmbeddedResource Include="../../contracts/releases/amd-26.11.1-original-194.sha256" LogicalName="Finesse.M195.Original194Manifest" />
+  </ItemGroup>
+</Project>
