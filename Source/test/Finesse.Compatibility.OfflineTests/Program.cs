@@ -657,6 +657,62 @@ if (OperatingSystem.IsWindows())
         "Inf2Cat never launches when original 194-file stage is incomplete");
 }
 
+
+// M195 REAL Windows device/inventory code, tested with fake data plus one
+// read-only SetupAPI enumeration on the Windows GitHub runner. No live driver
+// binding, pnputil export, certificate or reboot operation runs in these tests.
+M195WindowsGpuInventory.ObservedDisplay DisplayFor(
+    HandheldProfile p, string instance = "PCI\\TEST_INSTANCE",
+    string inf = "oem42.inf", uint problem = 0, uint status = 8,
+    string service = "amdkmdag", string provider = "Advanced Micro Devices") =>
+    new(instance, [p.HardwareId], M195WindowsGpuInventory.DisplayClass,
+        inf, provider, "32.0.32015.7029", service, status, problem);
+
+foreach (HandheldProfile p in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    var target = M195WindowsGpuInventory.RequireUniqueExactGpu([DisplayFor(p)]);
+    Check(target.Profile == p &&
+          M195WindowsGpuInventory.EligibleForRecoveryExport(target.Display),
+          "native display inventory matches exact hardware and healthy OEM baseline " + p.Id);
+    Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+        [DisplayFor(p, inf:"oem42.inf", problem: 0),
+         DisplayFor(p, instance: "PCI\\SECOND_TEST_INSTANCE")]),
+        "two matching display adapters rejected as ambiguous " + p.Id);
+    Check(!M195WindowsGpuInventory.EligibleForRecoveryExport(
+        DisplayFor(p, problem: 43)),
+        "Code43 is not eligible for healthy recovery export " + p.Id);
+    Check(!M195WindowsGpuInventory.EligibleForRecoveryExport(
+        DisplayFor(p, inf: "display.inf")),
+        "non-OEM active INF not eligible for recovery export " + p.Id);
+    Check(!M195WindowsGpuInventory.EligibleForRecoveryExport(
+        DisplayFor(p, service: "BasicDisplay", provider: "Microsoft")),
+        "Microsoft BasicDisplay not eligible for recovery export " + p.Id);
+}
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu([]),
+    "reject no supported display adapters");
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+    [DisplayFor(HandheldProfiles.Go1) with {
+        HardwareIds = [HandheldProfiles.Go1.HardwareId.Replace("REV_04", "REV_05",
+            StringComparison.Ordinal)] }]),
+    "reject near-match incorrect hardware revision");
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+    [DisplayFor(HandheldProfiles.Go2) with {
+        ClassGuid = Guid.NewGuid() }]),
+    "reject hardware match in a non-Display device class");
+
+if (OperatingSystem.IsWindows())
+{
+    IReadOnlyList<M195WindowsGpuInventory.ObservedDisplay> actualDisplays =
+        await M195WindowsGpuInventory.EnumerateAsync();
+    Check(actualDisplays.All(d => d.ClassGuid == M195WindowsGpuInventory.DisplayClass) &&
+          actualDisplays.All(d => !string.IsNullOrWhiteSpace(d.InstanceId)),
+          "native SetupAPI enumerates present Display class devices without mutation");
+    Console.WriteLine("M195_NATIVE_DISPLAY_COUNT=" + actualDisplays.Count);
+}
+
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
