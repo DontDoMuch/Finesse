@@ -89,6 +89,12 @@ The frozen M179 **retained** LocalMachine signer has now been ported to public C
 
 **These trust-changing and Driver Store-changing functions are intentionally internal and not connected to the GUI**. Original AMD catalog registration, full 14/14 dual-catalog checks, real NewDev bind/recovery, MSI and postboot are incomplete. CI parses the signing script without executing it and exercises CryptCATAdmin in read-only mode. See [live signing and dual-trust engineering](docs/M195-LIVE-SIGNING-STAGING-DUAL-TRUST.md).
 
+### Read-only 14/14 dual-catalog validation and Windows registration groundwork
+
+The M195 source now contains `M195WindowsDriverStoreLocator` and `M195WindowsDualCatalogAudit`, which verify the **actual assigned GPU** and published Driver Store package instead of relying on a staged folder. The audit records four independent 14-file proof counters, signature-policy status and catalog-database registration. A narrowly scoped **internal** `M195OriginalAmdCatalogRegistration` can register only the authentic pinned original WHCP catalog after verified original 14-file membership and rechecks registration; it remains **disconnected from the user-facing GUI**.
+
+The real 14-file signed-driver audit and catalog registration have **not** been executed on hardware in M195. Synthetic tests and native read-only SetupAPI mapping are not proof of installed-driver trust. See [14/14 catalog engineering notes](docs/M195-14-OF-14-DUAL-CATALOG.md).
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
