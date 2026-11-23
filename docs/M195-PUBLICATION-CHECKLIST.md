@@ -22,6 +22,19 @@
 - [ ] GitHub Release requires explicit approval, publishes checksum, source SHA, attestation, and build logs
 - [ ] Document how to verify attestation; never imply an attestation proves Microsoft code-signing or hardware success
 
+## Source-first 194-file handoff (current M195 status)
+
+- [x] Read the actual frozen M194 `M182InstallLifecycleWorkflow`, `M80Recipe`, and `M80Pipeline` dependencies
+- [x] Recover the original AMD 194-file inventory canonical SHA-256 and profile-specific candidate manifest fingerprints
+- [x] Add vendor-binary-free 194-file original source manifest parser and strict path/hash/duplicate validation
+- [x] Add an isolated unsigned stager that copies 192 unchanged files, replaces only the rebuilt INF/DAT, and preserves the authentic original main AMD catalog separately
+- [x] Add Windows CI regression tests for synthetic 194-file staging, source tampering, output overwrite and unsafe relative paths
+- [x] Add the source-first offline CLI compiled with normal system-installed .NET 10
+- [ ] Publish and independently review the exact 194-file path/hash manifest in GitHub (metadata only; no AMD file payload)
+- [ ] Publish or legally derive all 26/30/28 Lenovo per-profile registry directives without opaque embedded proprietary INFs
+- [ ] Integrate source acquisition, WinVerifyTrust, authentic extraction and source-first stage into the **actual GUI**; do not claim the offline CLI is the GUI
+- [ ] Run complete M194 lifecycle/regression tests in clean Windows CI and physical Secure Boot-on testing before release
+
 ## Compatibility and lifecycle (do not silently omit)
 
 - [ ] Exact Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme hardware routing; reject unsupported variants
