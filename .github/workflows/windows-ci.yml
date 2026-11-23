@@ -1,0 +1,43 @@
+# M195 infrastructure: intentionally fails before publish while the complete
+# redistributable installer source is absent. A green result must mean a real build.
+name: M195 Windows build (development only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [m195-public-build-ci-foundation]
+    paths:
+      - 'build.ps1'
+      - 'global.json'
+      - 'Source/**'
+      - '.github/workflows/windows-ci.yml'
+  pull_request:
+    paths:
+      - 'build.ps1'
+      - 'global.json'
+      - 'Source/**'
+      - '.github/workflows/windows-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-source-build:
+    name: Windows .NET 10 / source and test gate
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository (pinned)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install .NET 10 SDK on Windows runner (pinned)
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
+      - name: Run exactly the same build and checks as developers
+        shell: powershell
+        run: .\build.ps1 -Configuration Release -Ci
+
+# This workflow intentionally has NO release, signing, attestation or publish step.
+# Only add those after full public source and hardware-independent tests pass.
