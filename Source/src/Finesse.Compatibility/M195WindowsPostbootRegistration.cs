@@ -53,6 +53,7 @@ internal static class M195WindowsPostbootRegistration
         string running = Environment.ProcessPath ??
             throw new InvalidDataException("M195_STEP11_CURRENT_EXECUTABLE_UNKNOWN");
         running = Path.GetFullPath(running);
+        M195PostbootTicketContract.RequireFinesseHostPath(running);
         RequireNoReparse(running);
         if (!File.Exists(running) ||
             !string.Equals(Path.GetExtension(running), ".exe",
