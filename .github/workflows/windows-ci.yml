@@ -8,12 +8,16 @@ on:
     branches: [m195-public-build-ci-foundation]
     paths:
       - 'build.ps1'
+      - 'verify-public-source.ps1'
+      - '.gitignore'
       - 'global.json'
       - 'Source/**'
       - '.github/workflows/windows-ci.yml'
   pull_request:
     paths:
       - 'build.ps1'
+      - 'verify-public-source.ps1'
+      - '.gitignore'
       - 'global.json'
       - 'Source/**'
       - '.github/workflows/windows-ci.yml'
@@ -35,6 +39,9 @@ jobs:
         uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           global-json-file: global.json
+      - name: Audit public repository for proprietary driver assets and private keys
+        shell: powershell
+        run: .\verify-public-source.ps1
       - name: Confirm public AMD original manifest is present (metadata only)
         shell: powershell
         run: |
