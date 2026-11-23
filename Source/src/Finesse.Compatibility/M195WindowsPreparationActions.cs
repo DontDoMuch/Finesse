@@ -227,10 +227,9 @@ public sealed class M195WindowsPreparationActions :
         throw new NotSupportedException("M195_NATIVE_ADRENALIN_INSTALL_NOT_YET_PORTED");
 
     public Task<M195LifecycleSequence.RegisteredPostboot> RegisterPostbootAsync(
-        M195LifecycleSequence.Device device,
+        M195LifecycleSequence.PendingPostboot pending,
         M195LifecycleSequence.AssignedDriver original,
-        M195LifecycleSequence.Baseline baseline,
-        M195LifecycleSequence.BoundDriver bound, CancellationToken token) =>
+        M195LifecycleSequence.Baseline baseline, CancellationToken token) =>
         throw new NotSupportedException("M195_NATIVE_POSTBOOT_REGISTRATION_NOT_YET_PORTED");
 
     public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token) =>
