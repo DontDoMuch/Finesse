@@ -1400,6 +1400,33 @@ Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
     pinnedSettings with { Manufacturer = "Another Vendor" }),
     "native MSI identity refuses foreign publisher");
 
+
+var exactMsiArgs = M195AmdSettings26111.BuildMsiexecArguments(
+    true, @"C:\\AMD Settings\\ccc-next64.msi",
+    @"C:\\Evidence\\first-install.log").ToArray();
+Check(exactMsiArgs.SequenceEqual(new[] {
+        "/i", @"C:\\AMD Settings\\ccc-next64.msi",
+        "/qn", "/norestart", "/L*V", @"C:\\Evidence\\first-install.log" }),
+    "M140 target MSI first-install command is silent, quoted via ArgumentList, no restart");
+var exactUninstallArgs = M195AmdSettings26111.BuildMsiexecArguments(
+    false, blockers[0], @"C:\\Evidence\\uninstall.log").ToArray();
+Check(exactUninstallArgs.SequenceEqual(new[] {
+        "/x", blockers[0], "/qn", "/norestart", "/L*V",
+        @"C:\\Evidence\\uninstall.log" }),
+    "M184 verified blocker-only uninstall command is silent with no restart");
+Reject(() => M195AmdSettings26111.BuildMsiexecArguments(
+    false, M195AmdSettings26111.ProductCode, "target-uninstall.log"),
+    "MSI argument builder refuses removing the exact target ProductCode");
+Reject(() => M195AmdSettings26111.BuildMsiexecArguments(
+    false, "BAD-GUID", "bad-uninstall.log"),
+    "MSI argument builder refuses product-code without exact B GUID format");
+Reject(() => M195AmdSettings26111.BuildMsiexecArguments(
+    true, "wrong-source.exe", "bad-source.log"),
+    "MSI argument builder refuses execution of a full EXE as the AMD Settings MSI");
+Reject(() => M195AmdSettings26111.BuildMsiexecArguments(
+    true, "ccc-next64.msi", "no-verbose-extension"),
+    "MSI argument builder requires a fresh verbose .log destination");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
