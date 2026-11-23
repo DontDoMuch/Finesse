@@ -83,6 +83,12 @@ The public `Amd26111UnsignedCatalogGenerator` revalidates the full 194-file pack
 
 **The full public GUI is still not connected.** Step 8 signing/binding and Steps 10–12 AMD Software, restart and postboot recovery remain explicitly unimplemented in the concrete adapter. It throws rather than pretending to install a working driver. See [native adapter and hardware compatibility](docs/M195-WINDOWS-NATIVE-ADAPTER.md).
 
+### M195 retained live signing and Driver Store staging — source migrated, not enabled
+
+The frozen M179 **retained** LocalMachine signer has now been ported to public C# / Windows PowerShell 5.1 source, including its public Root/TrustedPublisher trust, one SignTool signing transaction, `/pa` and INF-membership verification. `M195LiveSigningPreflight` verifies the complete 194-file candidate and authentic original catalog **before any trust change**. The public compatibility code also includes native signed-package `SetupCopyOEMInfW` staging and exact staged `oem#.inf` SHA verification, with narrow newly owned signer cleanup only on API-reported stage failure.
+
+**These trust-changing and Driver Store-changing functions are intentionally internal and not connected to the GUI**. Original AMD catalog registration, full 14/14 dual-catalog checks, real NewDev bind/recovery, MSI and postboot are incomplete. CI parses the signing script without executing it and exercises CryptCATAdmin in read-only mode. See [live signing and dual-trust engineering](docs/M195-LIVE-SIGNING-STAGING-DUAL-TRUST.md).
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
