@@ -793,6 +793,38 @@ if (OperatingSystem.IsWindows())
         "rejected native baseline export creates no recovery directory");
 }
 
+
+// Frozen M179 read-only prebind identity selection, without invoking native
+// stage/bind APIs. Exact profile mapping, real HardwareIds and published INF.
+foreach (HandheldProfile p in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    var actual = M195WindowsGpuInventory.RequireUniqueExactGpu([DisplayFor(p)]);
+    string declared = "\"%TEST%\" = " + p.InstallSection + ", " + p.HardwareId + "\r\n";
+    M195WindowsBindIdentity.ProposedBind proposed =
+        M195WindowsBindIdentity.InspectProposedBind(actual, declared);
+    Check(proposed.Profile == p &&
+          proposed.HardwareId.Equals(p.HardwareId, StringComparison.OrdinalIgnoreCase) &&
+          proposed.InstanceId == actual.Display.InstanceId,
+        "M179 prebind selects observed exact HardwareId for " + p.Id);
+    Reject(() => M195WindowsBindIdentity.InspectProposedBind(
+        actual, declared + declared),
+        "M179 prebind rejects duplicate target manufacturer mapping " + p.Id);
+    Reject(() => M195WindowsBindIdentity.InspectProposedBind(
+        actual, declared.Replace(p.HardwareId,
+            p.HardwareId.Replace("REV_", "REV_0", StringComparison.Ordinal),
+            StringComparison.Ordinal)),
+        "M179 prebind rejects incorrect hardware mapping " + p.Id);
+}
+Check(M195WindowsBindIdentity.RequirePublishedOemInf("OEM45.INF") == "oem45.inf",
+    "native stage published INF normalized only after exact OEM filename validation");
+Reject(() => M195WindowsBindIdentity.RequirePublishedOemInf(@"C:\Windows\INF\oem45.inf"),
+    "native stage published INF disallows full user-controlled path");
+Reject(() => M195WindowsBindIdentity.RequirePublishedOemInf("display.inf"),
+    "native stage published INF disallows arbitrary INF name");
+
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
