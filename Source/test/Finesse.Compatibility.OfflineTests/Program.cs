@@ -78,4 +78,40 @@ Reject(() => AmdDatRecordCodec.Decode(badPosition), "reject invalid positional d
 Reject(() => AmdDatRecordCodec.EncodeRecordPayload([b, a]), "reject unsorted encoder input");
 Reject(() => AmdDatRecordCodec.EncodeRecordPayload([a, a]), "reject duplicate encoder input");
 
+
+const string copyCp = "CopyINF = .\\amdcp\\amdcp.inf\r\n";
+const string copyUw = "CopyINF=amduw23e.inf\r\n";
+var verified26111 = new[]
+{
+    new VerifiedCopyInfRemoval(copyCp, 11),
+    new VerifiedCopyInfRemoval(copyUw, 11)
+};
+foreach (HandheldProfile profile in new[] { HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2 })
+{
+    string suffix = profile.Id == HandheldProfiles.Go1.Id ? "Go1" :
+                    profile.Id == HandheldProfiles.GoS.Id ? "GoS" : "Go2";
+    string prefix = "[" + profile.InstallSection + "]\r\n" +
+                    profile.HardwareId + "\r\n" +
+                    "LegionGo_Finesse_" + suffix + "_Policy\r\n";
+    string syntheticInf = prefix + string.Concat(Enumerable.Repeat(copyCp, 11)) +
+                          string.Concat(Enumerable.Repeat(copyUw, 11)) + "; untouched\r\n";
+    string cleaned = AmdInfCopyInfClosure.RemoveVerifiedDependencies(
+        syntheticInf, profile, verified26111);
+    Check(cleaned == prefix + "; untouched\r\n", "exact M194 CopyINF removal " + profile.Id);
+    Check(AmdInfCopyInfClosure.RemoveVerifiedDependencies(
+        syntheticInf, profile, Array.Empty<VerifiedCopyInfRemoval>()) == syntheticInf,
+        "future version keeps CopyINF unless explicitly approved " + profile.Id);
+    Reject(() => AmdInfCopyInfClosure.RemoveVerifiedDependencies(
+        syntheticInf, profile, [new VerifiedCopyInfRemoval(copyCp, 10)]),
+        "reject wrong directive count " + profile.Id);
+    Reject(() => AmdInfCopyInfClosure.RemoveVerifiedDependencies(
+        syntheticInf, profile,
+        [new VerifiedCopyInfRemoval(copyCp, 11), new VerifiedCopyInfRemoval(copyCp, 11)]),
+        "reject duplicate removal contract " + profile.Id);
+    Reject(() => AmdInfCopyInfClosure.RemoveVerifiedDependencies(
+        syntheticInf.Replace("LegionGo_Finesse_" + suffix + "_Policy", "UNRELATED"),
+        profile, verified26111),
+        "reject altered profile policy " + profile.Id);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
