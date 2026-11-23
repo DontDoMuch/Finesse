@@ -411,4 +411,32 @@ Reject(() => Amd26111SourceInventory.ParsePinned26111(
             new string('0',64) + "  u0206030.inf", StringComparison.Ordinal)),
     "tampered published AMD original INF SHA cannot pass manifest pin");
 
+
+// Windows AMD official source gate: do not permit filename, HTTPS origin, or
+// plausible Authenticode identity to substitute for pinned file content.
+// Tests create only tiny synthetic files, and never run the AMD installer.
+string trustTestRoot = Path.Combine(Path.GetTempPath(),
+    "Finesse-M195-OfficialTrust-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(trustTestRoot);
+try
+{
+    string misleadingName = Path.Combine(trustTestRoot, "amd-unpinned.exe");
+    await File.WriteAllTextAsync(misleadingName, "SYNTHETIC-NOT-AMD");
+    Reject(() => OfficialAmdInstallerVerifier.Verify26111Async(misleadingName)
+        .GetAwaiter().GetResult(), "reject AMD installer with unpinned filename");
+
+    string pinnedName = Path.Combine(trustTestRoot,
+        OfficialAmd26111SourceContract.VerifiedFrozenM194.InstallerFileName);
+    await File.WriteAllTextAsync(pinnedName, "SYNTHETIC-NOT-AMD");
+    Reject(() => OfficialAmdInstallerVerifier.Verify26111Async(pinnedName)
+        .GetAwaiter().GetResult(),
+        "reject correct AMD filename with wrong size BEFORE signature inspection");
+    Check(new FileInfo(pinnedName).Length < 1024,
+        "source verifier read-only; synthetic input not replaced");
+}
+finally
+{
+    Directory.Delete(trustTestRoot, recursive: true);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
