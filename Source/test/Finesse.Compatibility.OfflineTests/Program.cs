@@ -1555,12 +1555,16 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
             FailSoftware ? "MSI rejected" : "MSI installed and verified", FailSoftware ? 1603 : 0));
     }
     public Task<L.RegisteredPostboot> RegisterPostbootAsync(
-        L.Device device, L.AssignedDriver original, L.Baseline baseline,
-        L.BoundDriver bound, CancellationToken token)
+        L.PendingPostboot pending, L.AssignedDriver original, L.Baseline baseline,
+        CancellationToken token)
     {
         Calls.Add("RegisterPostboot");
+        if (pending.OriginalDriverVersion != original.Version ||
+            pending.RegisteredBootIdentity != "boot-A" ||
+            pending.OriginalPublishedInf != original.PublishedInf)
+            throw new InvalidDataException("Fake pending ticket is incomplete");
         return Task.FromResult(new L.RegisteredPostboot(
-            "FAKE_TRANSACTION", true));
+            pending.TransactionId, true));
     }
     public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token)
     {
