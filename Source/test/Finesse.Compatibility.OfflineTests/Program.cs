@@ -439,4 +439,41 @@ finally
     Directory.Delete(trustTestRoot, recursive: true);
 }
 
+
+// Pinned extraction gate: the 7zr binary and official EXE must pass explicit
+// frozen hashes before ANY extraction, and the public metadata selects 195
+// original files, including one original AMD catalog.
+Check(Amd26111ArchiveExtraction.Pinned7zrBytes == 602_624 &&
+      Amd26111ArchiveExtraction.Pinned7zrSha256 ==
+          "256FECA8E274E5DA655E2A284FABAFD9F554365EB164862089DACD4E8276D282",
+      "verified original M194 7zr extractor length and sha256 contract");
+
+string extractionProbe = Path.Combine(Path.GetTempPath(),
+    "Finesse-M195-Extract-Probe-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(extractionProbe);
+try
+{
+    string notAmd = Path.Combine(extractionProbe, "not-official.exe");
+    File.WriteAllText(notAmd, "NOT-AMD");
+    string fake7z = Path.Combine(extractionProbe, "7zr.exe");
+    File.WriteAllText(fake7z, "NOT-7ZIP");
+    string newWorkspace = Path.Combine(extractionProbe, "NewWorkspace");
+    Reject(() => Amd26111ArchiveExtraction.ExtractAsync(notAmd, fake7z,
+        newWorkspace, publishedInventoryText).GetAwaiter().GetResult(),
+        "archive extraction rejects unpinned AMD source before running any tool");
+    Check(!Directory.Exists(newWorkspace),
+        "rejected archive source never creates extraction output");
+
+    Reject(() => Amd26111TwoPhasePreparation.VerifyAndStageAsync(
+        notAmd, extractionProbe, publishedInventoryText, "HKR,,Fixture,0x00010001,0",
+        HandheldProfiles.Go1, newWorkspace).GetAwaiter().GetResult(),
+        "two-phase preparation rejects unsigned original AMD installer first");
+    Check(!Directory.Exists(newWorkspace),
+        "two-phase source failure leaves no candidate package");
+}
+finally
+{
+    Directory.Delete(extractionProbe, recursive: true);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
