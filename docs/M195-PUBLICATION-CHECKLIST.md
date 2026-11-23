@@ -30,7 +30,7 @@
 - [x] Add an isolated unsigned stager that copies 192 unchanged files, replaces only the rebuilt INF/DAT, and preserves the authentic original main AMD catalog separately
 - [x] Add Windows CI regression tests for synthetic 194-file staging, source tampering, output overwrite and unsafe relative paths
 - [x] Add the source-first offline CLI compiled with normal system-installed .NET 10
-- [ ] Publish and independently review the exact 194-file path/hash manifest in GitHub (metadata only; no AMD file payload)
+- [x] Publish the exact 194-file path/hash manifest in GitHub (metadata only; no AMD file payload) and add CI consistency checks
 - [ ] Publish or legally derive all 26/30/28 Lenovo per-profile registry directives without opaque embedded proprietary INFs
 - [ ] Integrate source acquisition, WinVerifyTrust, authentic extraction and source-first stage into the **actual GUI**; do not claim the offline CLI is the GUI
 - [ ] Run complete M194 lifecycle/regression tests in clean Windows CI and physical Secure Boot-on testing before release
