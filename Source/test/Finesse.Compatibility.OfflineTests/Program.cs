@@ -476,4 +476,29 @@ finally
     Directory.Delete(extractionProbe, recursive: true);
 }
 
+
+// Exact source-first 195-file extraction closure: only original AMD display
+// files + the original main CAT, no private candidate or stale package.
+string[] selectedOriginal = Amd26111ArchiveExtraction.BuildPinnedOriginalSelection(
+    publishedInventoryText);
+string expectedArchivePrefix = OfficialAmd26111SourceContract.VerifiedFrozenM194
+    .RootInInstallerArchive.TrimEnd('/') + "/";
+Check(selectedOriginal.Length == 195 &&
+      selectedOriginal.All(x => x.StartsWith(expectedArchivePrefix,
+          StringComparison.Ordinal)) &&
+      selectedOriginal.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 195,
+      "pinned original AMD 26.11.1 selective extraction has 195 unique archive paths");
+Check(selectedOriginal.Count(x => x.Equals(expectedArchivePrefix + "u0206030.cat",
+          StringComparison.OrdinalIgnoreCase)) == 1 &&
+      selectedOriginal.Count(x => x.Equals(expectedArchivePrefix + "u0206030.inf",
+          StringComparison.OrdinalIgnoreCase)) == 1 &&
+      selectedOriginal.Count(x => x.Equals(expectedArchivePrefix + "B026778/amdgcf.dat",
+          StringComparison.OrdinalIgnoreCase)) == 1,
+      "195-file extraction selection includes original AMD catalog INF and DAT exactly once");
+Reject(() => Amd26111ArchiveExtraction.BuildPinnedOriginalSelection(
+        publishedInventoryText.Replace(
+            "2E1125EB79359D3BAEB283B81868064257C5F1436D8928AC2EC123837DD70C57  u0206030.inf",
+            new string('0', 64) + "  u0206030.inf", StringComparison.Ordinal)),
+    "selection cannot be derived from tampered original AMD metadata");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
