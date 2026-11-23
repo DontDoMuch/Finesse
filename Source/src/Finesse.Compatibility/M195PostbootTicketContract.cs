@@ -39,6 +39,19 @@ public static class M195PostbootTicketContract
             throw new InvalidDataException("M195_POSTBOOT_TESTER_VERIFIED_BACKUP_REQUIRED");
     }
 
+    /// <summary>
+    /// Registering a .NET SDK/dotnet.exe host would stage a binary that cannot
+    /// dispatch the postboot argument after the real reboot. Require the
+    /// exact single-file product host before creating a scheduled task.
+    /// </summary>
+    public static void RequireFinesseHostPath(string executable)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+        if (!string.Equals(Path.GetFileName(executable), ExecutableName,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("M195_POSTBOOT_NOT_ACTUAL_FINESSE_EXE");
+    }
+
     public static bool IsNewBoot(string before, string after)
     {
         if (!DateTimeOffset.TryParseExact(before, "O",
