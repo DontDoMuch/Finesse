@@ -44,7 +44,7 @@ internal static class M195WindowsScopedCleanup
             publishedInf.Equals(baselineInf, StringComparison.OrdinalIgnoreCase) ||
             !DisplayClass.IsMatch(infText))
             return false;
-        string (deviceId, subsystem, policy) = profile == HandheldProfiles.Go1
+        (string deviceId, string subsystem, string policy) = profile == HandheldProfiles.Go1
             ? ("15BF", "381217AA", "Go1") :
             profile == HandheldProfiles.GoS
             ? ("15BF", "380C17AA", "GoS") :
