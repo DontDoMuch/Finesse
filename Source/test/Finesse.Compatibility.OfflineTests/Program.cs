@@ -713,6 +713,58 @@ if (OperatingSystem.IsWindows())
 }
 
 
+
+// Real M195 Windows preparation adapter MUST NOT silently implement the
+// missing native signing/binding/MSI/reboot stage. No OS mutation in this test.
+var realPrepOnly = new M195WindowsPreparationActions(
+    new M195WindowsPreparationActions.Settings(
+        "UNCREATED_RECOVERY_FOLDER", "UNCREATED_AMD_DOWNLOAD",
+        "UNCREATED_SOURCE_EXTRACTION", "UNCREATED_UNSIGNED_STAGE",
+        "UNAVAILABLE_PINNED_7ZR.EXE", "UNAVAILABLE_PINNED_INF2CAT.EXE",
+        publishedInventoryText,
+        "HKR,,OfflineDummyPolicy,0x00010001,0", null));
+
+bool signBlocked = false, softwareBlocked = false, rebootBlocked = false;
+try
+{
+    await realPrepOnly.SignOnceStageBindAndVerifyDualTrustAsync(
+        null!, null!, null!, null!, CancellationToken.None);
+}
+catch (NotSupportedException ex)
+{
+    signBlocked = ex.Message.Contains("NOT_YET_PORTED", StringComparison.Ordinal);
+}
+try
+{
+    await realPrepOnly.InstallVerifiedAmdSoftwareAsync(null!, null!, CancellationToken.None);
+}
+catch (NotSupportedException ex)
+{
+    softwareBlocked = ex.Message.Contains("NOT_YET_PORTED", StringComparison.Ordinal);
+}
+try
+{
+    await realPrepOnly.RequestSingleRestartAsync(null!, CancellationToken.None);
+}
+catch (NotSupportedException ex)
+{
+    rebootBlocked = ex.Message.Contains("NOT_YET_PORTED", StringComparison.Ordinal);
+}
+Check(signBlocked && softwareBlocked && rebootBlocked,
+    "real Windows Steps 1-7 adapter refuses unported live sign/bind/MSI/reboot operations");
+if (OperatingSystem.IsWindows())
+{
+    string neverCreated = Path.Combine(Path.GetTempPath(),
+        "Finesse-M195-NeverCreated-" + Guid.NewGuid().ToString("N"));
+    var unhealthy = new M195WindowsGpuInventory.ExactGpu(
+        DisplayFor(HandheldProfiles.Go2, problem:43), HandheldProfiles.Go2);
+    Reject(() => M195WindowsRecoveryBaseline.ExportAsync(
+        unhealthy, neverCreated).GetAwaiter().GetResult(),
+        "real Windows pnputil export refuses unhealthy Go2 before starting a process");
+    Check(!Directory.Exists(neverCreated),
+        "rejected native baseline export creates no recovery directory");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
