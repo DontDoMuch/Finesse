@@ -776,12 +776,20 @@ try
 {
     await realPrepOnly.RequestSingleRestartAsync(null!, CancellationToken.None);
 }
-catch (NotSupportedException ex)
+catch (InvalidDataException ex)
 {
-    rebootBlocked = ex.Message.Contains("NOT_YET_PORTED", StringComparison.Ordinal);
+    rebootBlocked = ex.Message.Contains("M195_STEP11_RESTART_WITHOUT_VERIFIED_REGISTRATION",
+        StringComparison.Ordinal);
 }
 Check(signBlocked && softwareBlocked && rebootBlocked,
-    "real Windows Steps 1-7 adapter refuses unported live sign/bind/MSI/reboot operations");
+    "real Windows adapter refuses unported sign/bind/MSI and rejects reboot without exact registration");
+if (OperatingSystem.IsWindows())
+{
+    string identity = await realPrepOnly.ReadPreRebootBootIdentityAsync(CancellationToken.None);
+    Check(M195PostbootTicketContract.IsNewBoot(identity,
+          DateTimeOffset.Parse(identity).AddMinutes(5).ToString("O")),
+        "Step11 adapter returns a real parseable read-only Windows boot identity");
+}
 if (OperatingSystem.IsWindows())
 {
     string neverCreated = Path.Combine(Path.GetTempPath(),
