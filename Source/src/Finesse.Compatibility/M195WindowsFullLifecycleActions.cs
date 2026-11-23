@@ -19,7 +19,8 @@ internal sealed class M195WindowsFullLifecycleActions :
         string VerifiedPortable7ZipReleaseExe,
         string FreshSoftwareWorkspace,
         string FreshSoftwareEvidenceRoot,
-        string FreshPrebootRecoveryEvidenceRoot);
+        string FreshPrebootRecoveryEvidenceRoot,
+        string FreshScopedCleanupEvidenceRoot);
 
     private readonly Settings _settings;
     private readonly M195WindowsPreparationActions _preparation;
@@ -33,6 +34,7 @@ internal sealed class M195WindowsFullLifecycleActions :
     private M195LifecycleSequence.GeneratedCatalog? _unsigned;
     private M195LifecycleSequence.BoundDriver? _bound;
     private M195WindowsStep10Native.Result? _software;
+    private M195WindowsScopedCleanup.Result? _scopedCleanup;
 
     internal M195WindowsFullLifecycleActions(Settings settings)
     {
@@ -41,7 +43,8 @@ internal sealed class M195WindowsFullLifecycleActions :
         foreach (string path in new[] {
             settings.VerifiedSignToolExe, settings.VerifiedPortable7ZipReleaseExe,
             settings.FreshSoftwareWorkspace, settings.FreshSoftwareEvidenceRoot,
-            settings.FreshPrebootRecoveryEvidenceRoot
+            settings.FreshPrebootRecoveryEvidenceRoot,
+            settings.FreshScopedCleanupEvidenceRoot
         })
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (string.IsNullOrWhiteSpace(settings.Preparation.FreshPostbootEvidenceRoot))
@@ -77,6 +80,39 @@ internal sealed class M195WindowsFullLifecycleActions :
         if (_baseline is not null)
             throw new InvalidOperationException("M195_FULL_BASELINE_ALREADY_EXPORTED");
         _baseline = await _preparation.ExportBaselineAsync(device, assigned, token);
+        // Exact M194/M192 maintenance runs only AFTER the original driver is
+        // preserved. No wildcard cleanups, /uninstall, /force, or live trust
+        // removal. A maintenance warning is evidence, not an extra install gate.
+        try
+        {
+            _scopedCleanup = await M195WindowsScopedCleanup.RunAsync(
+                device, assigned, _baseline,
+                _settings.FreshScopedCleanupEvidenceRoot, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            // Preserve the core installation path even if optional cleanup
+            // cannot run (for example stale package is in use). Attempt to
+            // record the genuine error without inventing successful cleanup.
+            try
+            {
+                string folder = Path.GetFullPath(_settings.FreshScopedCleanupEvidenceRoot);
+                Directory.CreateDirectory(folder);
+                await M195WindowsPostbootRegistration.WriteNewAsync(
+                    Path.Combine(folder, "M195-ScopedCleanup-Warning-" +
+                        Guid.NewGuid().ToString("N") + ".json"), new {
+                        Schema = "Finesse.M195.M192.CleanupWarning.v1",
+                        Status = "INCOMPLETE_OPTIONAL_CLEANUP",
+                        OriginalDriverUnchangedAssumed = false,
+                        Error = error.GetType().Name + ": " + error.Message
+                    }, CancellationToken.None);
+            }
+            catch { /* source-verified installation should not be blocked */ }
+        }
         return _baseline;
     }
 
