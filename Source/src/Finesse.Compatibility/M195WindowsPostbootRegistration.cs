@@ -16,7 +16,8 @@ internal static class M195WindowsPostbootRegistration
         M195LifecycleSequence.PendingPostboot Pending,
         string ExecutableSha256, string StagedExecutablePath,
         string TaskName, string RegisteredPrincipalSid,
-        string RegisteredAtUtc, bool TaskReadbackVerified);
+        string RegisteredAtUtc, bool TaskReadbackVerified,
+        string? SourceSessionWorkspace = null);
 
     internal sealed record Registration(
         M195LifecycleSequence.RegisteredPostboot Result,
@@ -69,6 +70,16 @@ internal static class M195WindowsPostbootRegistration
         string task = M195PostbootTicketContract.TaskName(pending.TransactionId);
         string evidenceFolder = Path.GetFullPath(evidenceRoot);
         RequireNoReparse(Path.GetDirectoryName(evidenceFolder)!);
+        string sessionWorkspace = Path.GetDirectoryName(evidenceFolder) ??
+            throw new InvalidDataException("M195_STEP11_SESSION_ROOT_MISSING");
+        string allowedSessionBase = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Finesse", "Sessions")) + Path.DirectorySeparatorChar;
+        if (!sessionWorkspace.StartsWith(allowedSessionBase,
+                StringComparison.OrdinalIgnoreCase) ||
+            !Directory.Exists(sessionWorkspace))
+            throw new InvalidDataException("M195_STEP11_UNEXPECTED_SESSION_WORKSPACE");
+        RequireNoReparse(sessionWorkspace);
         if (Directory.Exists(evidenceFolder) || File.Exists(evidenceFolder))
             throw new IOException("M195_STEP11_EVIDENCE_ALREADY_EXISTS");
         Directory.CreateDirectory(evidenceFolder);
@@ -85,7 +96,8 @@ internal static class M195WindowsPostbootRegistration
             if (!string.Equals(Hash(stagedExe), sha, StringComparison.Ordinal))
                 throw new InvalidDataException("M195_STEP11_STAGED_EXECUTABLE_SHA_MISMATCH");
             var state = new DurableState(pending, sha, stagedExe, task,
-                sid, DateTimeOffset.UtcNow.ToString("O"), false);
+                sid, DateTimeOffset.UtcNow.ToString("O"), false,
+                sessionWorkspace);
             await WriteNewAsync(stateFile, state, token);
             if (!File.Exists(stateFile))
                 throw new InvalidDataException("M195_STEP11_PENDING_TICKET_NOT_DURABLE");
@@ -93,7 +105,9 @@ internal static class M195WindowsPostbootRegistration
                 await File.ReadAllTextAsync(stateFile, token));
             if (reread is null || reread.Pending != pending ||
                 reread.ExecutableSha256 != sha ||
-                reread.TaskName != task || reread.RegisteredPrincipalSid != sid)
+                reread.TaskName != task || reread.RegisteredPrincipalSid != sid ||
+                !string.Equals(reread.SourceSessionWorkspace, sessionWorkspace,
+                    StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("M195_STEP11_TICKET_READBACK_CHANGED");
             status = "REGISTERING_TASK";
             var executed = await RunPowerShellAsync(BuildRegistrationScript(
@@ -116,7 +130,8 @@ internal static class M195WindowsPostbootRegistration
                 Schema = "Finesse.M195.Step11Registration.v1",
                 Status = status, Pending = pending, TaskName = task,
                 StagedExecutable = stagedExe, ExecutableSha256 = sha,
-                StateFile = stateFile, PrincipalSid = sid, TaskExitCode = exit,
+                StateFile = stateFile, SourceSessionWorkspace = sessionWorkspace,
+                PrincipalSid = sid, TaskExitCode = exit,
                 TaskStdout = stdout[..Math.Min(stdout.Length, 20000)],
                 TaskStderr = stderr[..Math.Min(stderr.Length, 20000)],
                 RestartRequested = false, AmdSoftwareVerifiedBeforeRegistration = true,
@@ -241,6 +256,16 @@ internal static class M195WindowsPostbootRegistration
             !string.Equals(Hash(exe), state.ExecutableSha256,
                 StringComparison.Ordinal))
             throw new InvalidDataException("M195_STEP12_BINARY_OR_TASK_IDENTITY_CHANGED");
+        if (!string.IsNullOrWhiteSpace(state.SourceSessionWorkspace))
+        {
+            string allowed = Path.GetFullPath(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "Finesse", "Sessions")) + Path.DirectorySeparatorChar;
+            string original = Path.GetFullPath(state.SourceSessionWorkspace);
+            if (!original.StartsWith(allowed, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("M195_STEP12_PREBOOT_WORKSPACE_OUTSIDE_SESSION");
+            RequireNoReparse(original);
+        }
         return state;
     }
 
