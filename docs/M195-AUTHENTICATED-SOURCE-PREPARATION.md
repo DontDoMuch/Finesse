@@ -41,6 +41,14 @@ dotnet run --project Source/tools/Finesse.OfficialSourcePreparation/Finesse.Offi
 
 Supported `--profile`: `Go1`, `GoS`, `Go2`. The `--output-root` must not exist. The tool uses isolated subfolders for verified original extraction and unsigned candidate. It writes evidence files and hashes, not an installable Windows driver.
 
+### Optional pinned Microsoft Inf2Cat (still unsigned)
+
+The offline `Finesse.OfficialSourcePreparation` CLI also accepts an optional `--inf2cat "C:\\PATH\\TO\\VERIFIED\\Inf2Cat.exe"` argument. It must match the frozen WDK tool SHA-256 `82C302FC9069783674B51665CE80E769F8500DB7FC737A4B8A3773C521950B86`.
+
+When supplied, the tool rechecks the **entire 194-file original/candidate hash closure**, runs Inf2Cat, verifies that the generated catalog contains **zero signer infos**, records the tool logs, and confirms the 194 files and separate original AMD catalog were not modified.
+
+This is a **generated unsigned catalog**, not a trusted, signed, staged or installable Windows package. The Inf2Cat stage has compiled and passed rejection tests in CI, but has **not** been run with the real Microsoft WDK executable and authentic AMD package in M195.
+
 **Current validation limits:** Windows CI compiles this CLI and runs synthetic negative cases (including the official AMD download URL/redirect allowlist), device-routing cases, MetroHash/DAT transforms, INF cloning, the public 194-line manifest, 195-file original extraction-selection checks, and the unsigned 194-file staging tests. **CI does not download or execute the real 1.8 GB AMD installer**, and has not executed 7zr against that package. Real-source end-to-end extraction and physical postboot Code 0 must be measured separately.
 
 ## Remaining GUI/source work
