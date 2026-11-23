@@ -43,7 +43,7 @@ public static class AmdDatRecordCodec
         if (dat.Length != checked(HeaderBytes + count * RecordBytes))
             throw new InvalidDataException("AMD_DAT_LENGTH_COUNT_MISMATCH");
 
-        ulong releaseHeader = BinaryPrimitives.ReadUInt64LittleEndian(dat.AsSpan(4, 8));
+        ulong releaseHeader = BinaryPrimitives.ReadUInt64BigEndian(dat.AsSpan(4, 8));
         var rows = new DatDeviceRecord[count];
         DatDeviceRecord? previous = null;
         for (int i = 0; i < count; i++)
