@@ -31,7 +31,7 @@ byte[] Fixture(params DatDeviceRecord[] rows)
 {
     byte[] data = new byte[12 + rows.Length * 3];
     BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(0, 4), (uint)rows.Length);
-    BinaryPrimitives.WriteUInt64LittleEndian(data.AsSpan(4, 8), 0x0123456789ABCDEFul);
+    BinaryPrimitives.WriteUInt64BigEndian(data.AsSpan(4, 8), 0x0123456789ABCDEFul);
     AmdDatRecordCodec.EncodeRecordPayload(rows).CopyTo(data, 12);
     return data;
 }
@@ -59,7 +59,7 @@ Check(merged.Count == 3 && merged[0] == new DatDeviceRecord(0x150E, 0xC5) &&
 byte[] payload = AmdDatRecordCodec.EncodeRecordPayload(merged);
 byte[] synthetic = new byte[12 + payload.Length];
 BinaryPrimitives.WriteUInt32LittleEndian(synthetic.AsSpan(0, 4), (uint)merged.Count);
-BinaryPrimitives.WriteUInt64LittleEndian(synthetic.AsSpan(4, 8), 0x0123456789ABCDEFul);
+BinaryPrimitives.WriteUInt64BigEndian(synthetic.AsSpan(4, 8), 0x0123456789ABCDEFul);
 payload.CopyTo(synthetic, 12);
 var roundtrip = AmdDatRecordCodec.Decode(synthetic);
 Check(roundtrip.Records.SequenceEqual(merged), "payload full roundtrip");
