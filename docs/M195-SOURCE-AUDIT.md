@@ -2,7 +2,7 @@
 
 **Scope:** Audit of the actual frozen `M194-26111-THREE-DEVICE-FULL-LIFECYCLE-SOURCE.zip`, not a claim that the files have been published on GitHub.
 
-Frozen archive SHA-256: `E7BEAB1C14F8451D0667733CAEF CBA03D284D722FAB178B100E510CF949E9AA1` (formatting space should not be included).
+Frozen archive SHA-256: `E7BEAB1C14F8451D0667733CAEFCBA03D284D722FAB178B100E510CF949E9AA1`.
 
 ## What was confirmed
 
