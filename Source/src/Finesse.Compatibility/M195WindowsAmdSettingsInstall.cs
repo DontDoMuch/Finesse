@@ -147,9 +147,8 @@ internal static class M195WindowsAmdSettingsInstall
                 var start = new ProcessStartInfo(msiexec) {
                     UseShellExecute = false, CreateNoWindow = true
                 };
-                foreach (string a in new[] {
-                    isInstall ? "/i" : "/x", target,
-                    "/qn", "/norestart", "/L*V", log })
+                foreach (string a in M195AmdSettings26111.BuildMsiexecArguments(
+                    isInstall, target, log))
                     start.ArgumentList.Add(a);
                 enteredMsi = true;
                 state = operation + "_STARTED";
