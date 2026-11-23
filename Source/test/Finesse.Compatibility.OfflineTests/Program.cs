@@ -601,22 +601,35 @@ Check(!noBoot.Calls.Contains("RecoverPostboot"),
 // This test makes NO Windows security or driver configuration changes.
 if (OperatingSystem.IsWindows())
 {
-    string nativeSignedPe = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.System),
-        "WindowsPowerShell", "v1.0", "powershell.exe");
-    Check(File.Exists(nativeSignedPe),
-        "Windows runner has a Microsoft-signed system PowerShell executable");
-    var microsoftSignature = OfficialAmdInstallerVerifier.InspectWindowsSignature(nativeSignedPe);
-    Console.WriteLine("M195_NATIVE_WINTRUST_DIAGNOSTIC Status=0x" +
-        unchecked((uint)microsoftSignature.WindowsStatus).ToString("X8") +
-        " Trusted=" + microsoftSignature.Trusted +
-        " Subject=" + microsoftSignature.Subject +
-        " EmbeddedSignerPresent=" + !string.IsNullOrWhiteSpace(microsoftSignature.Thumbprint));
-    Check(microsoftSignature.Trusted && microsoftSignature.WindowsStatus == 0,
-          "actual WinVerifyTrust accepts Microsoft's native system executable");
-    // An inbox system PE can be catalog-signed rather than embedding a signer.
-    // The AMD-specific gate still requires an embedded AMD signer identity.
-
+    // Inbox Windows binaries can be catalog-signed. Probe several Microsoft
+    // PE applications, and require a real embedded Authenticode signer.
+    string system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+    string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+    var candidates = new[]
+    {
+        Path.Combine(programFiles, "dotnet", "dotnet.exe"),
+        Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe"),
+        Path.Combine(system, "WindowsPowerShell", "v1.0", "powershell.exe"),
+        Path.Combine(system, "msiexec.exe"),
+        Path.Combine(system, "winver.exe")
+    }.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    Check(candidates.Length > 0, "Windows runner provides Microsoft PE trust test candidates");
+    bool validatedEmbeddedMicrosoft = false;
+    foreach (string pe in candidates)
+    {
+        var signature = OfficialAmdInstallerVerifier.InspectWindowsSignature(pe);
+        Console.WriteLine("M195_NATIVE_WINTRUST_DIAGNOSTIC File=" + pe +
+            " Status=0x" + unchecked((uint)signature.WindowsStatus).ToString("X8") +
+            " Trusted=" + signature.Trusted +
+            " Subject=" + signature.Subject +
+            " EmbeddedSignerPresent=" + !string.IsNullOrWhiteSpace(signature.Thumbprint));
+        if (signature.Trusted && signature.WindowsStatus == 0 &&
+            signature.Subject.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(signature.Thumbprint))
+            validatedEmbeddedMicrosoft = true;
+    }
+    Check(validatedEmbeddedMicrosoft,
+        "native WinVerifyTrust validates an actual embedded Microsoft Authenticode signer");
 }
 
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
