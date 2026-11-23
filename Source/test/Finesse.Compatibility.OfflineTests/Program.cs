@@ -1303,6 +1303,80 @@ Reject(() => M195Step8Sequence.ExecuteAsync(
 Check(missingBackupFake.Calls.Count == 0,
     "Go2 missing backup prevents signing, staging or any mutation");
 
+
+// M169 exact MSI identity and M184 log-authorized fallback. These synthetic
+// checks NEVER execute msiexec or remove a registered desktop AMD product.
+Check(M195AmdSettings26111.MsiSha256 ==
+      "B1AFF2C1494877E15E23025D6B09F898E8E422777DA00CA013695181D7F116F2" &&
+      M195AmdSettings26111.CccBytes == 246_780_968 &&
+      M195AmdSettings26111.MsiBytes == 155_561_984 &&
+      M195AmdSettings26111.ProductCode ==
+        "{9E860308-0949-4D1D-BABD-980EEC7CE8CD}" &&
+      M195AmdSettings26111.UpgradeCode ==
+        "{A837E2B7-5BA6-4286-BC21-A002FCDD9A85}",
+    "M169 frozen AMD 26.11.1 CCC2/MSI/UpgradeCode pins match original contract");
+string wixLog = "Action start: FindRelatedProducts.\r\n" +
+    "Property(S): WIX_DOWNGRADE_DETECTED = {A8E5B545-3B0F-4A84-B766-EF079C00EAF9}\r\n" +
+    "Action ended 12:10:00: LaunchConditions. Return value 3.\r\n";
+string[] blockers = M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603, wixLog).ToArray();
+Check(blockers.Length == 1 &&
+      blockers[0] == "{A8E5B545-3B0F-4A84-B766-EF079C00EAF9}",
+    "M184 original 1603 WIX_DOWNGRADE_DETECTED parses one precise product identity");
+foreach (int code in new[] { 0, 3010, 1602, 1618, 1638, 5 })
+    Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(code, wixLog).Count == 0,
+        "M184 non-1603 MSI code " + code + " cannot authorize removal");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog.Replace("FindRelatedProducts", "AnotherAction")).Count == 0,
+    "M184 missing FindRelatedProducts prevents uninstall fallback");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog.Replace("Return value 3", "Return value 1")).Count == 0,
+    "M184 successful LaunchConditions cannot authorize removal");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog.Replace("WIX_DOWNGRADE_DETECTED", "ANY_OTHER_PROPERTY")).Count == 0,
+    "M184 unrelated MSI properties cannot authorize removal");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog + wixLog).Count == 0,
+    "M184 multiple candidate blocker properties are ambiguous");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog.Replace("{A8E5B545-3B0F-4A84-B766-EF079C00EAF9}", "invalid")).Count == 0,
+    "M184 malformed GUID cannot authorize uninstall");
+Check(M195AmdSettings26111.ReadVerifiedDowngradeBlockerCodes(1603,
+        wixLog.Replace("{A8E5B545-3B0F-4A84-B766-EF079C00EAF9}",
+            "{A8E5B545-3B0F-4A84-B766-EF079C00EAF9};{A8E5B545-3B0F-4A84-B766-EF079C00EAF9}")).Count == 0,
+    "M184 duplicate MSI blocker code rejected");
+var nativeRelatedMsi = new M195AmdSettings26111.RegisteredProduct(
+    blockers[0], "AMD Settings", "Advanced Micro Devices, Inc.",
+    "2026.1015.1803.2112", true, true);
+Check(M195AmdSettings26111.RequireVerifiedBlockers(
+        blockers, [nativeRelatedMsi]).Count == 1,
+    "M184 real blocker must be registered related AMD Settings with exact publisher");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi with { Publisher = "Other Publisher" }]),
+    "M184 foreign vendor product cannot be uninstalled");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi with { Name = "Other AMD Product" }]),
+    "M184 other AMD product cannot be uninstalled");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi with { RelatedByExactUpgradeCode = false }]),
+    "M184 wrong upgrade code cannot be uninstalled");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi with { Installed = false }]),
+    "M184 uninstalled stale product cannot be removed again");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi with { Code = "{55555555-5555-4555-8555-555555555555}" }]),
+    "M184 unrelated native MSI product identity cannot be removed");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    blockers, [nativeRelatedMsi, nativeRelatedMsi]),
+    "M184 duplicate related MSI inventory rejected");
+Reject(() => M195AmdSettings26111.RequireVerifiedBlockers(
+    [M195AmdSettings26111.ProductCode], [nativeRelatedMsi with {
+        Code = M195AmdSettings26111.ProductCode }]),
+    "M184 MSI target itself cannot be removed");
+Check(M195AmdSettings26111.IsTargetMsiSuccess(0) &&
+      M195AmdSettings26111.IsTargetMsiSuccess(3010) &&
+      !M195AmdSettings26111.IsTargetMsiSuccess(1603),
+    "M169 MSI return codes 0/3010 success while 1603 remains failure");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
