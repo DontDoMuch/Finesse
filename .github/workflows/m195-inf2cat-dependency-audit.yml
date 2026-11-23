@@ -6,6 +6,8 @@ on:
     branches: [m195-public-build-ci-foundation]
     paths:
       - '.github/workflows/m195-inf2cat-dependency-audit.yml'
+      - 'Source/src/Finesse.Compatibility/M195PinnedToolBootstrap.cs'
+      - 'Source/test/Finesse.Compatibility.OfflineTests/Program.cs'
 
 permissions:
   contents: read
