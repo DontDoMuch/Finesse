@@ -44,6 +44,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Offline compatibility tests failed" }
           dotnet build "Source/tools/Finesse.DatVerifier/Finesse.DatVerifier.csproj" --configuration Release
           if ($LASTEXITCODE -ne 0) { throw "Offline DAT verifier tool failed to compile" }
+          dotnet build "Source/tools/Finesse.CandidateVerifier/Finesse.CandidateVerifier.csproj" --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "Combined offline INF+DAT candidate verifier failed to compile" }
 
   public-installer-source-gate:
     name: Full public installer (BLOCKED until redistributable source is complete)
