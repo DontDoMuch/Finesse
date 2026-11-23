@@ -35,8 +35,21 @@ public static class M195WindowsGpuInventory
         {
             if (device.ClassGuid != DisplayClass)
                 continue;
+            // Frozen M194 Go1 permitted the revisionless HardwareIds form.
+            // Go S and Go 2 must retain exact REV/subsystem matching. Reject
+            // any contradictory explicit Go1 revision instead of masking it
+            // with the fallback ID on the same devnode.
+            string go1Base = HandheldProfiles.Go1.HardwareId[
+                ..HandheldProfiles.Go1.HardwareId.IndexOf("&REV_", StringComparison.Ordinal)];
+            if (device.HardwareIds.Any(id =>
+                id.StartsWith(go1Base + "&REV_", StringComparison.OrdinalIgnoreCase) &&
+                !id.Equals(HandheldProfiles.Go1.HardwareId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("M195_GO1_CONFLICTING_EXPLICIT_REVISION");
+
             HandheldProfile[] profileHits = device.HardwareIds
-                .Select(HandheldProfiles.Resolve)
+                .Select(id => HandheldProfiles.Resolve(id) ??
+                    (string.Equals(id, go1Base, StringComparison.OrdinalIgnoreCase)
+                        ? HandheldProfiles.Go1 : null))
                 .Where(x => x is not null).Cast<HandheldProfile>()
                 .Distinct().ToArray();
             if (profileHits.Length > 1)
