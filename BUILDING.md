@@ -71,6 +71,12 @@ dotnet build Source/tools/Finesse.OfficialSourcePreparation/Finesse.OfficialSour
 
 Read [authenticated source preparation](docs/M195-AUTHENTICATED-SOURCE-PREPARATION.md) for expected inputs, the approved AMD executable/extractor, limits and the complete developer CLI command. **This is not yet the finished Finesse installer and it does not sign or install drivers.** No portable .NET SDK is needed.
 
+### M195 lifecycle and signing-source integration boundary
+
+The branch now also includes a 12-step `M195LifecycleSequence` coordinator that mirrors the actual M194 order: exact device detection, recovery backup, official AMD source verification, original extraction, candidate preparation, unsigned catalog, one signing/binding/dual-trust stage, preboot observation, **AMD Software before the single reboot**, and first postboot observation before recovery. It is tested against fake Windows adapters; there is **no full production Windows adapter or GUI connected yet**.
+
+The public `Amd26111UnsignedCatalogGenerator` revalidates the full 194-file package and invokes only the exact pinned Microsoft WDK Inf2Cat tool. This creates an **unsigned** catalog, not trusted or installable driver output. Detailed dependencies and actual frozen M194 source references are in [M195 lifecycle bridge](docs/M195-LIFECYCLE-BRIDGE.md).
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
