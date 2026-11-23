@@ -236,29 +236,56 @@ internal sealed class M195WindowsFullLifecycleActions :
         if (_bound is null)
             throw new InvalidOperationException("M195_FULL_ROLLBACK_BEFORE_BIND");
 
-        var recovery = await M195WindowsNativeBind.RestoreAfterPrebootFailureAsync(
-            device, _bound, original, baseline, token);
+        // A failed or full evidence volume must not prevent an actual
+        // verified-original rollback. Attempt immutable diagnostic receipts
+        // before and after native recovery, but make recovery independent
+        // of the ability to create a JSON file.
+        string recoveryId = Guid.NewGuid().ToString("N");
         string root = Path.GetFullPath(_settings.FreshPrebootRecoveryEvidenceRoot);
-        if (Directory.Exists(root) || File.Exists(root))
-            throw new IOException("M195_FULL_ROLLBACK_EVIDENCE_ALREADY_PRESENT");
-        Directory.CreateDirectory(root);
-        string receipt = Path.Combine(root, "M195-Preboot-Recovery.json");
-        await File.WriteAllTextAsync(receipt,
-            JsonSerializer.Serialize(new {
-                Schema = "Finesse.M195.PrebootRecovery.v1",
-                OriginalInf = original.PublishedInf,
-                OriginalVersion = original.Version,
-                TargetInf = _bound.PublishedInf,
-                TargetVersion = _bound.TargetDriverVersion,
+        async Task RecordAsync(string phase, object data)
+        {
+            try
+            {
+                Directory.CreateDirectory(root);
+                await M195WindowsPostbootRegistration.WriteNewAsync(
+                    Path.Combine(root, "M195-Preboot-Recovery-" +
+                        recoveryId + "-" + phase + ".json"),
+                    data, CancellationToken.None);
+            }
+            catch { /* a logging error must not suppress driver recovery */ }
+        }
+        await RecordAsync("Started", new {
+            Schema = "Finesse.M195.PrebootRecoveryStarted.v1",
+            OriginalInf = original.PublishedInf,
+            OriginalVersion = original.Version,
+            BoundInf = _bound.PublishedInf,
+            BoundVersion = _bound.TargetDriverVersion,
+            RecoveryRequested = true, ExtraRestartRequested = false
+        });
+        try
+        {
+            var recovery = await M195WindowsNativeBind.RestoreAfterPrebootFailureAsync(
+                device, _bound, original, baseline, token);
+            await RecordAsync("Result", new {
+                Schema = "Finesse.M195.PrebootRecoveryResult.v1",
                 Native = recovery,
                 ActualBaselineCode0Confirmed = recovery.ConfirmedCode0,
                 ExtraRestartRequested = false
-            }, new JsonSerializerOptions { WriteIndented = true }),
-            new UTF8Encoding(false), CancellationToken.None);
-        return new M195LifecycleSequence.RecoveryResult(
-            recovery.ConfirmedCode0, recovery.ObservedInf,
-            recovery.ObservedProblemCode is null ? null :
-                checked((int)recovery.ObservedProblemCode.Value));
+            });
+            return new M195LifecycleSequence.RecoveryResult(
+                recovery.ConfirmedCode0, recovery.ObservedInf,
+                recovery.ObservedProblemCode is null ? null :
+                    checked((int)recovery.ObservedProblemCode.Value));
+        }
+        catch (Exception error)
+        {
+            await RecordAsync("Error", new {
+                Schema = "Finesse.M195.PrebootRecoveryError.v1",
+                Failure = error.GetType().Name + ": " + error.Message,
+                RecoveryVerified = false, ExtraRestartRequested = false
+            });
+            throw;
+        }
     }
 
     private void RequireNotStarted()
