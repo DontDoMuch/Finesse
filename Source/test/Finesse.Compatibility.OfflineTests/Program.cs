@@ -869,6 +869,57 @@ foreach (HandheldProfile p in new[] {
         "native Step9 rejects changed GPU device instance " + p.Id);
 }
 
+
+// M195 retained M179 signer identity / READ-ONLY preflight tests.
+// These do not create a certificate, run SignTool, or stage a GPU driver.
+Check(M195LiveSigningPreflight.PinnedMicrosoftSignToolSha256 ==
+      "80972965E7FC311D293222B1A0E2C1BFB60F363239173964DBE2A71638314B9F" &&
+      M195LiveSigningPreflight.PinnedOriginalAmdMainCatalogSha256 ==
+      "786D0B7F596D367F2C71BADAA31068DD1A63C20E0C8C7DE94E8E23019EBAFE04",
+      "M179 verified original SignTool and authentic AMD catalog hashes preserved");
+Check(M195LiveSigningPreflight.IsOwnedSigner(
+          new string('A', 40),
+          "CN=Finesse-Local-Live-0123456789abcdef0123456789abcdef"),
+      "recognize the exact M179-owned LocalMachine signing certificate identity");
+Check(!M195LiveSigningPreflight.IsOwnedSigner(
+          new string('A', 40), "CN=Microsoft Windows") &&
+      !M195LiveSigningPreflight.IsOwnedSigner(
+          "not-a-sha1-thumbprint",
+          "CN=Finesse-Local-Live-0123456789abcdef0123456789abcdef") &&
+      !M195LiveSigningPreflight.IsOwnedSigner(
+          new string('A', 40), "CN=Finesse-Local-Live-arbitrary"),
+      "reject non-owned certificate subject or malformed thumbprint");
+if (OperatingSystem.IsWindows())
+{
+    var fakeUnsigned = new Amd26111UnsignedCatalogGenerator.Result(
+        "UNCREATED_UNSIGNED_MAIN_CATALOG.CAT", new string('C', 64),
+        194, false, "NO_STDOUT", "NO_STDERR", 0);
+    var fakeStage = new AmdSourceFirstStager.UnsignedStageResult(
+        "UNCREATED_FAKE_PREPARED_ROOT", "UNCREATED_ORIGINAL_AMD_CAT",
+        M195LiveSigningPreflight.PinnedOriginalAmdMainCatalogSha256,
+        Amd26111SourceInventory.PinnedOriginalManifestSha256,
+        Amd26111SourceInventory.PinnedCandidateManifestHash(HandheldProfiles.Go1),
+        194, "UNCREATED_EVIDENCE", false);
+    var fakeCandidate = new Amd26111CandidateRecipe.VerifiedCandidate(
+        HandheldProfiles.Go1, [], [],
+        "5F49F240CBDA41F7BD6E30867751507ACF38386B7AA3E0848639BCD002FE691A",
+        "7986B5DC0CB3C2207ECE857D0060475A603B5342649D146874850C0D4A2509CA",
+        Amd26111CandidateRecipe.ReleaseMarker);
+    Reject(() => M195LiveSigningPreflight.Validate(
+        fakeStage, fakeCandidate, fakeUnsigned,
+        publishedInventoryText, "UNVERIFIED-SIGNTOOL.EXE"),
+        "live signer refuses missing or unverified original source BEFORE machine trust mutation");
+    Reject(() => M195LiveSigningPreflight.Validate(
+        fakeStage with { VerifiedFiles = 193 }, fakeCandidate, fakeUnsigned,
+        publishedInventoryText, "UNVERIFIED-SIGNTOOL.EXE"),
+        "live signer refuses 193-file candidate, never silently skips catalog members");
+    Reject(() => M195LiveSigningPreflight.Validate(
+        fakeStage, fakeCandidate,
+        fakeUnsigned with { CatalogContainsSigners = true },
+        publishedInventoryText, "UNVERIFIED-SIGNTOOL.EXE"),
+        "live signer refuses a previously signed or reused catalog");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
