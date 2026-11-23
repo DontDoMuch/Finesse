@@ -632,6 +632,31 @@ if (OperatingSystem.IsWindows())
         "native WinVerifyTrust validates an actual embedded Microsoft Authenticode signer");
 }
 
+
+// The Inf2Cat stage is a real OFFLINE tool, never automatically signed.
+// Validate that its source gate refuses an incomplete 194-file package before
+// attempting a WDK process or touching any Windows certificate store.
+Check(Amd26111UnsignedCatalogGenerator.PinnedInf2CatSha256 ==
+      "82C302FC9069783674B51665CE80E769F8500DB7FC737A4B8A3773C521950B86",
+      "frozen M149 Microsoft Inf2Cat executable SHA-256 retained");
+if (OperatingSystem.IsWindows())
+{
+    var rejectedUnsignedStage = new AmdSourceFirstStager.UnsignedStageResult(
+        "UNCREATED_UNSIGNED_CANDIDATE_DIR", "UNCREATED_ORIGINAL_CAT",
+        new string('A', 64), Amd26111SourceInventory.PinnedOriginalManifestSha256,
+        Amd26111SourceInventory.PinnedCandidateManifestHash(HandheldProfiles.Go1),
+        193, "NO_EVIDENCE", false);
+    var markerOnly = new Amd26111CandidateRecipe.VerifiedCandidate(
+        HandheldProfiles.Go1, [], [],
+        "5F49F240CBDA41F7BD6E30867751507ACF38386B7AA3E0848639BCD002FE691A",
+        "7986B5DC0CB3C2207ECE857D0060475A603B5342649D146874850C0D4A2509CA",
+        Amd26111CandidateRecipe.ReleaseMarker);
+    Reject(() => Amd26111UnsignedCatalogGenerator.GenerateAsync(
+        rejectedUnsignedStage, markerOnly, publishedInventoryText,
+        "NOT-A-VERIFIED-INF2CAT.EXE").GetAwaiter().GetResult(),
+        "Inf2Cat never launches when original 194-file stage is incomplete");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
