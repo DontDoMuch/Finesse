@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Finesse.Compatibility;
+using L = Finesse.Compatibility.M195LifecycleSequence;
 
 // Vendor-independent synthetic fixtures. These tests do not assert a valid
 // release-specific MetroHash header or GPU driver installation success.
@@ -531,4 +532,217 @@ Check(!OfficialAmd26111Downloader.IsApprovedDownloadUri(
         new Uri("https://drivers.amd.com:444/drivers/" + pinnedReleaseName)),
       "reject different release or nonstandard port");
 
+
+// M195 lifecycle ordering contract: pure fake Windows adapters; never binds
+// drivers, signs catalogs, installs software or reboots test runners.
+var lifecycle = new FakeM195Lifecycle();
+var lifecycleSteps = new List<L.Step>();
+L.PendingPostboot pending = await L.RunPrebootAsync(lifecycle,
+    (step, _) => lifecycleSteps.Add(step));
+Check(lifecycleSteps.SequenceEqual(Enumerable.Range(1, 11)
+          .Select(n => (L.Step)n)) &&
+      lifecycle.Calls.Count(c => c == "Reboot") == 1,
+      "12-step M194-derived lifecycle requests exactly one reboot after 11 ordered preboot steps");
+Check(lifecycle.Calls.IndexOf("Software") < lifecycle.Calls.IndexOf("RegisterPostboot") &&
+      lifecycle.Calls.IndexOf("RegisterPostboot") < lifecycle.Calls.IndexOf("Reboot") &&
+      pending.PrebootCode43 &&
+      pending.ExpectedDriverVersion ==
+          OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+      "Code43 remains provisional; AMD Software precedes registration and single reboot");
+L.PostbootOutcome postboot = await L.RunPostbootAsync(pending, lifecycle,
+    (step, _) => lifecycleSteps.Add(step));
+Check(lifecycleSteps.Count == 12 && lifecycleSteps[11] == L.Step.VerifyPostboot &&
+      postboot.Status == L.PostbootState.TargetConfirmedCode0 &&
+      postboot.TargetDriverConfirmed && lifecycle.Calls.IndexOf("ObserveFirstPostboot") >= 0 &&
+      !lifecycle.Calls.Contains("RecoverPostboot"),
+      "postboot target Code0 confirms only after a new boot and first observation");
+
+var badSoftware = new FakeM195Lifecycle { FailSoftware = true };
+Reject(() => L.RunPrebootAsync(badSoftware).GetAwaiter().GetResult(),
+    "abort installation when AMD Software fails before any reboot");
+Check(!badSoftware.Calls.Contains("RegisterPostboot") &&
+      !badSoftware.Calls.Contains("Reboot") &&
+      badSoftware.Calls.Contains("PrebootRollback"),
+      "software failure restores original driver and never schedules reboot");
+
+var badTrust = new FakeM195Lifecycle { DualTrustedCount = 13 };
+Reject(() => L.RunPrebootAsync(badTrust).GetAwaiter().GetResult(),
+    "reject fewer than 14/14 critical dual-catalog trust files");
+Check(!badTrust.Calls.Contains("Software") && !badTrust.Calls.Contains("Reboot") &&
+      badTrust.Calls.Contains("PrebootRollback"),
+      "dual trust failure cannot silently proceed to AMD Software or reboot");
+
+var badBaseline = new FakeM195Lifecycle { UseGo2 = true, VerifiedBaseline = false };
+Reject(() => L.RunPrebootAsync(badBaseline).GetAwaiter().GetResult(),
+    "Go2 tester requires verified existing-driver export before mutation");
+Check(!badBaseline.Calls.Contains("Acquire") && !badBaseline.Calls.Contains("Reboot"),
+      "missing tester recovery baseline stops before source acquisition");
+
+var failedPostboot = new FakeM195Lifecycle { PostbootProblemCode = 43 };
+L.PendingPostboot ticket = await L.RunPrebootAsync(failedPostboot);
+var reverted = await L.RunPostbootAsync(ticket, failedPostboot);
+Check(reverted.Status == L.PostbootState.TargetFailedRecovered &&
+      !reverted.TargetDriverConfirmed &&
+      failedPostboot.Calls.IndexOf("ObserveFirstPostboot") <
+          failedPostboot.Calls.IndexOf("RecoverPostboot") &&
+      failedPostboot.Calls.Count(c => c == "Reboot") == 1,
+      "failed postboot target observed before recovery; recovery never called target success");
+
+var noBoot = new FakeM195Lifecycle { PostbootIdentity = "boot-A" };
+L.PendingPostboot beforeRealRestart = await L.RunPrebootAsync(noBoot);
+Reject(() => L.RunPostbootAsync(beforeRealRestart, noBoot).GetAwaiter().GetResult(),
+    "reject fake postboot success without real boot identity change");
+Check(!noBoot.Calls.Contains("RecoverPostboot"),
+      "no recovery happens without first confirmed postboot observation");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
+
+
+sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActions
+{
+    public List<string> Calls { get; } = [];
+    public bool FailSoftware { get; init; }
+    public bool VerifiedBaseline { get; init; } = true;
+    public bool UseGo2 { get; init; }
+    public int DualTrustedCount { get; init; } = 14;
+    public int PostbootProblemCode { get; init; }
+    public string PostbootIdentity { get; init; } = "boot-B";
+    private L.Device Device => new("PCI\\VEN_1002&FAKE_INSTANCE",
+        (UseGo2 ? HandheldProfiles.Go2 : HandheldProfiles.Go1).HardwareId,
+        UseGo2 ? HandheldProfiles.Go2 : HandheldProfiles.Go1);
+
+    public Task<L.Device> IdentifyExactDeviceAsync(CancellationToken token)
+    {
+        Calls.Add("Identify");
+        return Task.FromResult(Device);
+    }
+    public Task<L.AssignedDriver> InspectAssignedDriverAsync(L.Device device, CancellationToken token)
+    {
+        Calls.Add("Inspect");
+        return Task.FromResult(new L.AssignedDriver("oem34.inf", "32.0.32015.7029", 0,
+            true, "healthy active GPU"));
+    }
+    public Task<L.Baseline> ExportBaselineAsync(
+        L.Device device, L.AssignedDriver assigned, CancellationToken token)
+    {
+        Calls.Add("Backup");
+        return Task.FromResult(new L.Baseline(
+            VerifiedBaseline ? "FAKE_BACKUP_DIR_NOT_CREATED" : null,
+            VerifiedBaseline, VerifiedBaseline ? "oem34.inf" : null));
+    }
+    public Task<OfficialAmdInstallerVerifier.VerifiedSource> AcquireVerifiedAmdInstallerAsync(
+        CancellationToken token)
+    {
+        Calls.Add("Acquire");
+        var contract = OfficialAmd26111SourceContract.VerifiedFrozenM194;
+        return Task.FromResult(new OfficialAmdInstallerVerifier.VerifiedSource(
+            "FAKE_VERIFIED_AMD_SOURCE_NOT_ON_DISK", contract.InstallerSha256,
+            contract.ExactInstallerBytes, "Advanced Micro Devices, Inc.",
+            "FAKE_WINDOWS_SIGNER_THUMBPRINT", DateTimeOffset.UtcNow));
+    }
+    public Task<Amd26111ArchiveExtraction.VerifiedExtraction> ExtractOriginalAmdAsync(
+        OfficialAmdInstallerVerifier.VerifiedSource source, CancellationToken token)
+    {
+        Calls.Add("Extract");
+        return Task.FromResult(new Amd26111ArchiveExtraction.VerifiedExtraction(
+            "FAKE_AMD_SOURCE", "FAKE_EXTRACTION", Amd26111SourceInventory.PinnedOriginalManifestSha256,
+            new string('A', 64), 194, 1, "FAKE_EXTRACT_RECEIPT"));
+    }
+    public Task<Amd26111TwoPhasePreparation.PreparationReceipt> BuildUnsignedCandidateAsync(
+        L.Device device, OfficialAmdInstallerVerifier.VerifiedSource source,
+        Amd26111ArchiveExtraction.VerifiedExtraction extracted, CancellationToken token)
+    {
+        Calls.Add("Prepare");
+        string inf = device.Profile.Id switch
+        {
+            "LegionGo1" => "5F49F240CBDA41F7BD6E30867751507ACF38386B7AA3E0848639BCD002FE691A",
+            "LegionGo2-Z2Extreme" => "A355187F07FEEE5A0E0EDCC772A95C68E4F54B04323DE3D45634FFBE447CCBA3",
+            _ => "E2B0809F3E3D135BFD03F1E0D97D1140BD6A05557024CE1D3EB604DFDAA90071"
+        };
+        string dat = device.Profile == HandheldProfiles.Go2
+            ? "B63E4F58C164950B41C07071B3CF6797B35ACC597B9476836FCA66E8A658E3FD"
+            : "7986B5DC0CB3C2207ECE857D0060475A603B5342649D146874850C0D4A2509CA";
+        var candidate = new Amd26111CandidateRecipe.VerifiedCandidate(
+            device.Profile, [], [], inf, dat, Amd26111CandidateRecipe.ReleaseMarker);
+        var stage = new AmdSourceFirstStager.UnsignedStageResult(
+            "FAKE_UNSIGNED_PREPARED_FOLDER", "FAKE_ORIGINAL_CAT", new string('A', 64),
+            Amd26111SourceInventory.PinnedOriginalManifestSha256,
+            Amd26111SourceInventory.PinnedCandidateManifestHash(device.Profile),
+            194, "FAKE_STAGE_RECEIPT", false);
+        return Task.FromResult(new Amd26111TwoPhasePreparation.PreparationReceipt(
+            source, candidate, stage));
+    }
+    public Task<L.GeneratedCatalog> GenerateUnsignedCatalogAsync(
+        Amd26111TwoPhasePreparation.PreparationReceipt prepared, CancellationToken token)
+    {
+        Calls.Add("GenerateCatalog");
+        return Task.FromResult(new L.GeneratedCatalog(
+            "FAKE_CATALOG", new string('C', 64), 194, false));
+    }
+    public Task<L.BoundDriver> SignOnceStageBindAndVerifyDualTrustAsync(
+        L.Device device, Amd26111TwoPhasePreparation.PreparationReceipt prepared,
+        L.GeneratedCatalog generated, L.Baseline baseline, CancellationToken token)
+    {
+        Calls.Add("Bind");
+        return Task.FromResult(new L.BoundDriver(
+            "oem49.inf", OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+            new string('D', 64), DualTrustedCount, true, true, true));
+    }
+    public Task<L.PrebootObservation> ObservePrebootAsync(
+        L.Device device, L.BoundDriver bound, CancellationToken token)
+    {
+        Calls.Add("Preboot");
+        return Task.FromResult(new L.PrebootObservation(
+            device.InstanceId, bound.PublishedInf, bound.TargetDriverVersion,
+            43, L.PrebootState.Code43AwaitingPostboot));
+    }
+    public Task<L.SoftwareResult> InstallVerifiedAmdSoftwareAsync(
+        OfficialAmdInstallerVerifier.VerifiedSource source, L.BoundDriver bound,
+        CancellationToken token)
+    {
+        Calls.Add("Software");
+        return Task.FromResult(new L.SoftwareResult(!FailSoftware,
+            FailSoftware ? "MSI rejected" : "MSI installed and verified", FailSoftware ? 1603 : 0));
+    }
+    public Task<L.RegisteredPostboot> RegisterPostbootAsync(
+        L.Device device, L.AssignedDriver original, L.Baseline baseline,
+        L.BoundDriver bound, CancellationToken token)
+    {
+        Calls.Add("RegisterPostboot");
+        return Task.FromResult(new L.RegisteredPostboot(
+            "FAKE_TRANSACTION", true));
+    }
+    public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token)
+    {
+        Calls.Add("ReadBoot");
+        return Task.FromResult("boot-A");
+    }
+    public Task RequestSingleRestartAsync(
+        L.RegisteredPostboot registration, CancellationToken token)
+    {
+        Calls.Add("Reboot");
+        return Task.CompletedTask;
+    }
+    public Task<L.RecoveryResult> RestoreBaselineAfterPrebootFailureAsync(
+        L.Device device, L.AssignedDriver original, L.Baseline baseline,
+        CancellationToken token)
+    {
+        Calls.Add("PrebootRollback");
+        return Task.FromResult(new L.RecoveryResult(
+            true, original.PublishedInf, 0));
+    }
+    public Task<L.PostbootObservation> CaptureFirstObservationAsync(
+        L.PendingPostboot pending, CancellationToken token)
+    {
+        Calls.Add("ObserveFirstPostboot");
+        return Task.FromResult(new L.PostbootObservation(
+            pending.InstanceId, pending.ExpectedPublishedInf,
+            pending.ExpectedDriverVersion, PostbootProblemCode, true, PostbootIdentity));
+    }
+    public Task<L.RecoveryResult> RecoverBaselineAsync(
+        L.PendingPostboot pending, L.PostbootObservation first, CancellationToken token)
+    {
+        Calls.Add("RecoverPostboot");
+        return Task.FromResult(new L.RecoveryResult(true, pending.OriginalPublishedInf, 0));
+    }
+}
