@@ -114,4 +114,44 @@ foreach (HandheldProfile profile in new[] { HandheldProfiles.Go1, HandheldProfil
         "reject altered profile policy " + profile.Id);
 }
 
+
+Check(AmdDatReleaseRebuilder.MetroHash64(Array.Empty<byte>()) == 0x705FB008071E967Dul,
+    "MetroHash64 reference empty vector");
+Check(AmdDatReleaseRebuilder.MetroHash64(System.Text.Encoding.ASCII.GetBytes("hello")) ==
+      0x3F6FEA196D1F90FCul, "MetroHash64 reference hello vector");
+
+const string release26111 = "26.20.15.16-261109a-206030E-AMD-Software-Adrenalin-Edition";
+byte[] cleanOriginal = Fixture(new DatDeviceRecord(0x1100, 0x00));
+BinaryPrimitives.WriteUInt64BigEndian(cleanOriginal.AsSpan(4, 8),
+    AmdDatReleaseRebuilder.ComputeReleaseHeader(
+        cleanOriginal.AsSpan(AmdDatRecordCodec.HeaderBytes), release26111));
+Check(AmdDatReleaseRebuilder.VerifyOriginal(cleanOriginal, release26111).Count == 1,
+    "release-specific checksum validates original DAT");
+
+foreach (HandheldProfile profile in new[] { HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2 })
+{
+    byte[] rebuilt = AmdDatReleaseRebuilder.BuildForVerifiedProfile(cleanOriginal, release26111, profile);
+    DatRecordAnalysis checkedBuilt = AmdDatReleaseRebuilder.VerifyOriginal(rebuilt, release26111);
+    Check(checkedBuilt.Count == 3 &&
+          checkedBuilt.Records.Contains(new DatDeviceRecord(profile.DeviceId, profile.Revision)) &&
+          checkedBuilt.Records.Contains(new DatDeviceRecord(0x15C8, 0xC9)) &&
+          checkedBuilt.Records.Contains(new DatDeviceRecord(0x1100, 0x00)),
+          "full DAT rehash, 3 records, all rows preserved " + profile.Id);
+    byte[] repeated = AmdDatReleaseRebuilder.BuildForVerifiedProfile(rebuilt, release26111, profile);
+    Check(repeated.SequenceEqual(rebuilt), "idempotent DAT reconstruction " + profile.Id);
+}
+Reject(() => AmdDatReleaseRebuilder.VerifyOriginal(cleanOriginal, "WRONG_RELEASE_STRING"),
+    "reject incorrect release MetroHash marker");
+var tamperedChecksum = (byte[])cleanOriginal.Clone();
+tamperedChecksum[6] ^= 0x01;
+Reject(() => AmdDatReleaseRebuilder.VerifyOriginal(tamperedChecksum, release26111),
+    "reject modified original DAT checksum");
+var tamperedRecord = (byte[])cleanOriginal.Clone();
+tamperedRecord[14] ^= 0x01;
+Reject(() => AmdDatReleaseRebuilder.VerifyOriginal(tamperedRecord, release26111),
+    "reject modified original DAT record with stale header");
+Reject(() => AmdDatReleaseRebuilder.BuildForVerifiedProfile(cleanOriginal, release26111,
+    HandheldProfiles.Go2 with { HardwareId = HandheldProfiles.Go1.HardwareId }),
+    "reject spoofed/modified profile object");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
