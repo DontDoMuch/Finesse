@@ -166,7 +166,7 @@ public static class AmdDatReleaseRebuilder
 
         DatRecordAnalysis final = VerifyOriginal(updated, exactAmdReleaseMarker);
         if (!final.Records.SequenceEqual(rows) ||
-            !original.Records.All(final.Records.Contains) ||
+            !original.Records.All(row => final.Records.Contains(row)) ||
             !final.Records.Contains(new DatDeviceRecord(profile.DeviceId, profile.Revision)) ||
             !final.Records.Contains(new DatDeviceRecord(0x15C8, 0xC9)) ||
             final.Count < original.Count || final.Count > original.Count + 2)
