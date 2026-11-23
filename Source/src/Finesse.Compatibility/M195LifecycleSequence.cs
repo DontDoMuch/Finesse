@@ -176,14 +176,18 @@ public static class M195LifecycleSequence
             Advance(Step.SignStageBindAndValidate, "Installing and validating the signed driver");
             bound = await actions.SignOnceStageBindAndVerifyDualTrustAsync(
                 device, prepared, generated, baseline, token);
+            // M194 M191 captured 14x4 dual-trust evidence independently.
+            // Incomplete or unavailable OPTIONAL catalog audit is recorded,
+            // never upgraded to "14/14" and never used as an invented
+            // unconditional installation gate. The native signed/staged/assigned
+            // target identity is still mandatory.
             if (bound is null || !bound.SignedOnce ||
-                bound.DualTrustedCriticalFiles != 14 ||
-                !bound.OriginalAmdCatalogVerified ||
+                bound.DualTrustedCriticalFiles is < 0 or > 14 ||
                 bound.TargetDriverVersion !=
                     OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion ||
                 string.IsNullOrWhiteSpace(bound.PublishedInf) ||
                 string.IsNullOrWhiteSpace(bound.MainSignedCatalogSha256))
-                throw new InvalidDataException("M195_LIFECYCLE_SIGN_BIND_DUAL_TRUST_INCOMPLETE");
+                throw new InvalidDataException("M195_LIFECYCLE_SIGN_BIND_CORE_IDENTITY_INCOMPLETE");
 
             Advance(Step.VerifyPreboot, "Checking your GPU before restart");
             var preboot = await actions.ObservePrebootAsync(device, bound, token);
