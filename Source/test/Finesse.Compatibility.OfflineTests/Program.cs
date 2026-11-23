@@ -690,6 +690,34 @@ foreach (HandheldProfile p in new[] {
         DisplayFor(p, service: "BasicDisplay", provider: "Microsoft")),
         "Microsoft BasicDisplay not eligible for recovery export " + p.Id);
 }
+
+string frozenGo1Revisionless = HandheldProfiles.Go1.HardwareId[
+    ..HandheldProfiles.Go1.HardwareId.IndexOf("&REV_", StringComparison.Ordinal)];
+var revisionlessGo1 = DisplayFor(HandheldProfiles.Go1) with {
+    HardwareIds = [frozenGo1Revisionless]
+};
+Check(M195WindowsGpuInventory.RequireUniqueExactGpu([revisionlessGo1]).Profile ==
+      HandheldProfiles.Go1,
+      "frozen M194 Go1 revisionless PCI HardwareIds fallback preserved");
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+        [revisionlessGo1 with {
+            HardwareIds = [frozenGo1Revisionless,
+                frozenGo1Revisionless + "&REV_05"]
+        }]),
+    "Go1 revisionless fallback rejects conflicting explicit wrong revision");
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+        [DisplayFor(HandheldProfiles.Go2) with {
+            HardwareIds = [HandheldProfiles.Go2.HardwareId[
+                ..HandheldProfiles.Go2.HardwareId.IndexOf("&REV_", StringComparison.Ordinal)]]
+        }]),
+    "Go2 does not inherit Go1 revisionless hardware fallback");
+Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
+        [DisplayFor(HandheldProfiles.GoS) with {
+            HardwareIds = [HandheldProfiles.GoS.HardwareId[
+                ..HandheldProfiles.GoS.HardwareId.IndexOf("&REV_", StringComparison.Ordinal)]]
+        }]),
+    "Go S does not inherit Go1 revisionless hardware fallback");
+
 Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu([]),
     "reject no supported display adapters");
 Reject(() => M195WindowsGpuInventory.RequireUniqueExactGpu(
