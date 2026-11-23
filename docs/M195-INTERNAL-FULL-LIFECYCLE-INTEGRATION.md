@@ -12,11 +12,11 @@ The three exact profile targets remain Go1 Z1 Extreme `PCI\VEN_1002&DEV_15BF&SUB
 
 ## Implemented in this continuation
 
-### 1. `M195WindowsFullLifecycleActions.cs` — internal 12-step native orchestration
+### 1. `M195WindowsFullLifecycleActions.cs` — internal Steps 1–11 native orchestration
 
 This `internal sealed` adapter implements the existing M194-derived `M195LifecycleSequence.IWindowsInstallationActions`. It composes the tested preparation-only adapter but **does not enable** the latter's public NotSupported install methods. It stores and requires identity of the actual in-process receipts:
 
-- Steps 1–3: exact GPU/profile, existing assigned INF/version, eligible verified baseline export (Go S/Go2 mandatory; Go1 original policy preserved)
+- Steps 1–3: exact GPU/profile, existing assigned INF/version, eligible verified baseline export (Go S/Go2 mandatory; Go1 original policy preserved). After backup, optional source-faithful M192 scoped cleanup occurs without adding an installation acceptance blocker
 - Steps 4–6: the exact authenticated official AMD 26.11.1 installer and original 194-file extraction, then the correct profile's INF and DAT candidate
 - Step 7: invokes the **real** `Amd26111UnsignedCatalogGenerator.GenerateAsync` and retains the full process-result object (`ExitCode`, SHA-256, logs). Crucially it **does not reconstruct or fabricate** a positive Inf2Cat process receipt from a smaller GUI DTO
 - Step 8: passes that exact receipt and prepared candidate into `M195WindowsStep8Native.ExecuteAsync` for one retained signer, SetupAPI staged driver, native NewDev GPU binding, original AMD catalog registration and fully measured optional 14x4 dual trust
@@ -44,6 +44,12 @@ Windows CI exposed and then verified the fix for a file-rename error: close the 
 ### 4. `M195WindowsNativeBind.RestoreAfterPrebootFailureAsync`
 
 This new native path rechecks full original export SHA hashes before any rollback, requires the exact observed current GPU and supported HardwareID, rejects foreign assigned drivers, and returns a verified original Code0 receipt only after Windows confirms matching original INF/version and no required reboot. It does not request a second restart.
+
+### 5. `M195WindowsScopedCleanup.cs` — frozen M192 maintenance parity
+
+The internal full adapter now runs the frozen M192 operation **after** preserving the healthy original driver and **before** acquiring/preparing AMD 26.11.1. The C# port examines only inactive `oemNN.inf` packages that match the exact three-profile `Class=Display`, `DEV_`, `SUBSYS_`, and `[LegionGo_Finesse_<profile>_Policy]` signatures. It verifies the original active driver\'s identity and original INF SHA before and after any scoped PnPUtil call, and invokes only `pnputil /delete-driver <exact-oemNN.inf>`—never `/uninstall`, `/force`, or a bulk store purge. Assigned OEM extensions, currently active display packages, the exported backup and authentic catalogs are protected.
+
+The optional orphan-certificate cleanup inspects only the exact historical temporary M175/M164 identities in `CurrentUser/My`, preserving any identity still present in CurrentUser Root. It does **not** modify CurrentUser Root, LocalMachine signing trust or Microsoft catalogs. A cleanup failure produces an evidence warning and cannot by itself reject an otherwise valid driver install. Exact-profile synthetic positive/negative classifier tests run on Windows CI, but **no live INF deletion or certificate removal** has been performed in M195 tests.
 
 ## Regression and test boundaries
 
