@@ -985,6 +985,24 @@ if (OperatingSystem.IsWindows())
     }
 }
 
+
+// Exact 14 critical graphics file SHA-256 targets recovered from frozen M191.
+// Metadata-only regression: no AMD binary files are checked into the repo.
+M195AmdDualTrustTargets.VerifySourceInventory(frozenOriginal);
+Check(M195AmdDualTrustTargets.For26111.Count == 14 &&
+      M195AmdDualTrustTargets.For26111.Select(t => t.Relative)
+          .Distinct(StringComparer.OrdinalIgnoreCase).Count() == 14,
+      "frozen M191 original AMD dual-catalog critical target contract is 14 unique files");
+Check(M195AmdDualTrustTargets.For26111.Any(t =>
+        t.Relative.EndsWith("/amdxc64.dll", StringComparison.OrdinalIgnoreCase) &&
+        t.OriginalSha256 ==
+            "5090826B251CD75CFB4F8583EE744089382B5C88CE62D78A46128AED0B8CF33B") &&
+      M195AmdDualTrustTargets.For26111.Any(t =>
+        t.Relative.EndsWith("/amdkmdag.sys", StringComparison.OrdinalIgnoreCase) &&
+        t.OriginalSha256 ==
+            OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalKernelSha256),
+      "kernel and AMDXC critical graphics hashes are preserved from authenticated original");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
