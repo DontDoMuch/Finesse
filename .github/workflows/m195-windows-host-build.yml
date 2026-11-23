@@ -1,0 +1,67 @@
+name: M195 single-file Windows host compile (NOT a release)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [m195-public-build-ci-foundation]
+    paths:
+      - 'Source/**'
+      - '.github/workflows/m195-windows-host-build.yml'
+      - 'global.json'
+      - 'verify-public-source.ps1'
+  pull_request:
+    paths:
+      - 'Source/**'
+      - '.github/workflows/m195-windows-host-build.yml'
+      - 'global.json'
+      - 'verify-public-source.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  host-build-only:
+    name: WinForms single EXE build (no driver install, no hardware claims)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository without stored credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          global-json-file: global.json
+      - name: Confirm no proprietary AMD binaries or private signing keys in source
+        shell: powershell
+        run: .\verify-public-source.ps1
+      - name: Publish a self-contained Windows x64 EXE to runner TEMP only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = 'Source/src/Finesse.WindowsHost/Finesse.WindowsHost.csproj'
+          $dest = Join-Path $env:RUNNER_TEMP 'Finesse-M195-Host-BuildOnly'
+          dotnet publish $project --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:PublishTrimmed=false -p:DebugType=None --output $dest
+          if ($LASTEXITCODE -ne 0) { throw 'M195 Windows host publish did not compile.' }
+          $exe = Join-Path $dest 'Finesse.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'M195 expected Finesse.exe missing.'
+          }
+          $unexpected = @(Get-ChildItem -LiteralPath $dest -File -Recurse |
+            Where-Object { $_.FullName -ne $exe -and $_.Extension -ne '.pdb' })
+          if ($unexpected.Count -ne 0) {
+            throw ('Unexpected standalone dependencies in purported single EXE: ' +
+              ($unexpected.FullName -join ', '))
+          }
+          $info = Get-Item -LiteralPath $exe
+          if ($info.Length -lt 10000000) {
+            throw 'Finesse.exe too small for an independently self-contained WinForms host.'
+          }
+          $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+          $signature = Get-AuthenticodeSignature -LiteralPath $exe
+          Write-Host "M195_HOST_SINGLE_EXE_BUILD_PASS size=$($info.Length) SHA256=$sha"
+          Write-Host "M195_HOST_SIGNING_STATUS=$($signature.Status)"
+          Write-Host 'M195_HARDWARE_NOT_TESTED=TRUE'
+          Write-Host 'M195_DRIVER_INSTALL_NOT_EXECUTED=TRUE'
+      # Build-only; deliberately do NOT upload or publish an unsigned EXE.
