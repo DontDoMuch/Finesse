@@ -5,12 +5,14 @@
 ## Intended requirements
 
 - Windows 11 x64 build machine
-- .NET **10 SDK** installed through the normal Microsoft installer (available as `dotnet` on `PATH`)
+- **System-installed Microsoft .NET 10 SDK**, installed normally and made available as `dotnet` on the machine's `PATH`
 - PowerShell 5.1 or PowerShell 7 for the build script; all script features must work on the stated minimum version
 - Network access for authenticated restore of declared dependencies
 - Windows SDK tooling as actually required by the source and its test harnesses
 
-You will **not** need the maintainer's machine-specific .NET directory, an undocumented portable SDK cache, Test Signing, or a private certificate to compile the application.
+**Do not use or download a project-local/portable SDK.** No `dotnet-install.ps1`, unpacked `dotnet.exe` shipped with the repo, private portable SDK cache, machine-specific path, or implicit SDK installation in `build.ps1`. If the global .NET 10 SDK is missing, report the requirement and stop. GitHub Actions must use an installed SDK on its Windows runner (it may install the SDK through a pinned, reviewed setup step), not a project-local runtime folder.
+
+This is a **developer build dependency only**. The published Finesse EXE remains self-contained; end users do **not** install .NET to run it.
 
 ## Planned source-build commands
 
@@ -19,12 +21,13 @@ Once the source-publication blockers below are resolved, the supported instructi
 ```powershell
 git clone https://github.com/DontDoMuch/Finesse.git
 Set-Location Finesse
+dotnet --info
 .\build.ps1
 ```
 
-The future `build.ps1` must discover `dotnet` with `Get-Command dotnet -CommandType Application`, use `$PSScriptRoot` for repository-relative paths, run restore/build/tests, publish a **self-contained Windows x64 single-file EXE**, check each native process exit code, and produce a SHA-256 manifest. CI must run **the same script**.
+The future `build.ps1` must resolve the **system-installed** CLI with `Get-Command dotnet -CommandType Application -ErrorAction Stop`, use `$PSScriptRoot` for repository-relative paths, verify `dotnet --version` and its exit code against the SDK requirement, run restore/build/tests, publish a **self-contained Windows x64 single-file EXE**, check every native process exit code, and produce a SHA-256 manifest. CI must run **the same script**.
 
-A repository `global.json` will select .NET 10 with a declared SDK roll-forward policy. It is *not* an absolute SDK path or a substitute for installing the SDK.
+A repository `global.json` selects a compatible system-installed .NET 10 SDK with a declared roll-forward policy. **It does not install .NET, define an environment variable, or specify an absolute filesystem path.** System-wide discovery comes from `PATH`, not from manually manipulating `DOTNET_ROOT` or assuming the maintainer's SDK directory.
 
 ## Blockers before a genuine public build
 
@@ -36,7 +39,7 @@ A repository `global.json` will select .NET 10 with a declared SDK roll-forward 
 
 ## Required build behavior
 
-- Pin and verify dependencies, selected SDK and tool versions; avoid hardcoded developer paths
+- Pin and verify dependencies, selected system SDK and tool versions; avoid hardcoded developer paths or project-local SDK downloads
 - Detect the exact supported hardware profile (Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme)
 - Preserve the profile-specific AMD-faithful INF and DAT reconstruction, including **dynamic 3-byte positional DAT encoding and release-specific MetroHash64**, not copied 26.11.1 offsets/hashes
 - Treat a successful compiler exit as **build success only**, not driver compatibility proof
