@@ -23,19 +23,24 @@ public static class Amd26111UnsignedCatalogGenerator
     public static async Task<Result> GenerateAsync(
         AmdSourceFirstStager.UnsignedStageResult staged,
         Amd26111CandidateRecipe.VerifiedCandidate candidate,
+        string original194ManifestText,
         string verifiedInf2CatExe,
         CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(staged);
         ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(original194ManifestText);
+        AmdVerifiedSourceInventory sourceProofs =
+            Amd26111SourceInventory.ParsePinned26111(original194ManifestText);
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Inf2Cat requires Windows.");
 
         var original = staged.OriginalInventorySha256;
         var expected = Amd26111SourceInventory.PinnedCandidateManifestHash(candidate.Profile);
-        if (original != Amd26111SourceInventory.PinnedOriginalManifestSha256 ||
+        if (original != sourceProofs.CanonicalSha256 ||
             staged.CandidateInventorySha256 != expected || staged.VerifiedFiles != 194 ||
-            staged.SignedOrInstallable)
+            staged.SignedOrInstallable ||
+            Amd26111SourceInventory.CandidateManifestSha256(sourceProofs, candidate) != expected)
             throw new InvalidDataException("M195_INF2CAT_UNVERIFIED_STAGE");
 
         string root = Path.GetFullPath(staged.PackageRoot);
@@ -54,7 +59,9 @@ public static class Amd26111UnsignedCatalogGenerator
         string datPath = Path.Combine(root, "B026778", "amdgcf.dat");
         if (!File.Exists(infPath) || !File.Exists(datPath) ||
             ShaFile(infPath) != candidate.InfSha256 ||
-            ShaFile(datPath) != candidate.DatSha256)
+            ShaFile(datPath) != candidate.DatSha256 ||
+            Convert.ToHexString(SHA256.HashData(candidate.InfBytes)) != candidate.InfSha256 ||
+            Convert.ToHexString(SHA256.HashData(candidate.DatBytes)) != candidate.DatSha256)
             throw new InvalidDataException("M195_INF2CAT_INF_DAT_CHANGED");
         string target = Path.Combine(root, "u0206030.cat");
         if (File.Exists(target))
@@ -76,11 +83,20 @@ public static class Amd26111UnsignedCatalogGenerator
             if (!beforeMap.TryAdd(relative, ShaFile(file)))
                 throw new InvalidDataException("M195_INF2CAT_CASE_COLLISION");
         }
-        if (!beforeMap.TryGetValue("u0206030.inf", out string? preInf) ||
-            preInf != candidate.InfSha256 ||
-            !beforeMap.TryGetValue("B026778/amdgcf.dat", out string? preDat) ||
-            preDat != candidate.DatSha256)
-            throw new InvalidDataException("M195_INF2CAT_INPUT_IDENTITY_MISMATCH");
+        // Match every filename and SHA to the separately pinned authentic AMD
+        // original, allowing ONLY the two known candidate replacements.
+        if (beforeMap.Count != sourceProofs.Entries.Count)
+            throw new InvalidDataException("M195_INF2CAT_UNEXPECTED_FILESET");
+        foreach (AmdSourceFileProof file in sourceProofs.Entries)
+        {
+            string hash = file.Relative.Equals("u0206030.inf",
+                StringComparison.OrdinalIgnoreCase) ? candidate.InfSha256 :
+                file.Relative.Equals("B026778/amdgcf.dat",
+                StringComparison.OrdinalIgnoreCase) ? candidate.DatSha256 : file.Sha256;
+            if (!beforeMap.TryGetValue(file.Relative, out string? actualHash) ||
+                actualHash != hash)
+                throw new InvalidDataException("M195_INF2CAT_SOURCE_HASH_MISMATCH: " + file.Relative);
+        }
 
         string evidenceDir = Path.GetDirectoryName(staged.EvidencePath) ??
             throw new InvalidDataException("M195_INF2CAT_NO_EVIDENCE_FOLDER");
