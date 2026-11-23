@@ -1117,6 +1117,34 @@ if (OperatingSystem.IsWindows())
         "driverstore locator refuses invalid published INF before invoking native SetupAPI");
 }
 
+
+// Exact live bound GPU precondition for native M191 dual-catalog observation.
+// A staged OEM INF is not an assigned GPU driver. Code43 pending reboot is
+// permitted for observation but still never counts as postboot Code0.
+foreach (HandheldProfile testProfile in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    string version = OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion;
+    var observed = DisplayFor(testProfile, instance: "PCI\\M195_TEST_GPU",
+        inf: "oem88.inf", problem: 43) with { Version = version };
+    var gpu = new M195WindowsGpuInventory.ExactGpu(observed, testProfile);
+    var expectedDevice = new L.Device(observed.InstanceId, testProfile.HardwareId, testProfile);
+    M195WindowsDualCatalogAudit.RequireAssignedTargetDriver(
+        expectedDevice, "oem88.inf", gpu);
+    Check(true, "native M191 dual-catalog accepts exact preboot assigned GPU Code43 " + testProfile.Id);
+    Reject(() => M195WindowsDualCatalogAudit.RequireAssignedTargetDriver(
+        expectedDevice, "oem77.inf", gpu),
+        "reject staged but NOT assigned OEM INF for M191 audit " + testProfile.Id);
+    Reject(() => M195WindowsDualCatalogAudit.RequireAssignedTargetDriver(
+        expectedDevice, "oem88.inf",
+        gpu with { Display = observed with { Version = "32.0.32015.7029" } }),
+        "reject unrelated active GPU driver version " + testProfile.Id);
+    Reject(() => M195WindowsDualCatalogAudit.RequireAssignedTargetDriver(
+        expectedDevice with { InstanceId = "PCI\\OTHER_GPU" }, "oem88.inf", gpu),
+        "reject different assigned GPU instance " + testProfile.Id);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
