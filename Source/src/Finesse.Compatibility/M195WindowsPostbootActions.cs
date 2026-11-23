@@ -240,57 +240,7 @@ internal sealed class M195WindowsPostbootActions : M195LifecycleSequence.IPostbo
         return new(restored, restoredInf, problemCode);
     }
 
-    private async Task UnregisterTaskAsync(CancellationToken token)
-    {
-        string ps = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-            "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-        static string Enc(string value) =>
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
-        string script = """
-            $ErrorActionPreference='Stop'
-            function Decode([string]$x) {
-              [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($x))
-            }
-            $taskName=Decode('@TASK@')
-            $exe=Decode('@EXE@')
-            $args=Decode('@ARGS@')
-            $sid=Decode('@SID@')
-            $task=Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-            if(@($task.Actions).Count -ne 1 -or
-               [string]$task.Actions[0].Execute -ine $exe -or
-               [string]$task.Actions[0].Arguments -cne $args -or
-               [string]$task.Principal.RunLevel -notin @('Highest','1')) {
-              throw 'M195_STEP12_TASK_CLEANUP_IDENTITY_MISMATCH'
-            }
-            $taskSid=[string]$task.Principal.UserId
-            if($taskSid -notmatch '^S-1-\d+(?:-\d+)+$') {
-              $taskSid=([Security.Principal.NTAccount]::new($taskSid)).Translate(
-                [Security.Principal.SecurityIdentifier]).Value
-            }
-            if($taskSid -ne $sid) {throw 'M195_STEP12_TASK_CLEANUP_PRINCIPAL_CHANGED'}
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-            """;
-        script = script.Replace("@TASK@", Enc(_state.TaskName), StringComparison.Ordinal)
-            .Replace("@EXE@", Enc(_state.StagedExecutablePath), StringComparison.Ordinal)
-            .Replace("@ARGS@", Enc(M195PostbootTicketContract.ResumeArgument), StringComparison.Ordinal)
-            .Replace("@SID@", Enc(_state.RegisteredPrincipalSid), StringComparison.Ordinal);
-        var start = new ProcessStartInfo(ps) {
-            UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true
-        };
-        foreach (string arg in new[] {
-            "-NoProfile", "-NonInteractive", "-EncodedCommand",
-            Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) })
-            start.ArgumentList.Add(arg);
-        using Process child = Process.Start(start) ??
-            throw new IOException("M195_STEP12_TASK_CLEANUP_DID_NOT_START");
-        var output = child.StandardOutput.ReadToEndAsync(token);
-        var errors = child.StandardError.ReadToEndAsync(token);
-        await Task.WhenAll(output, errors, child.WaitForExitAsync(token));
-        if (child.ExitCode != 0)
-            throw new InvalidDataException(
-                "M195_STEP12_TASK_CLEANUP_FAILED_" + child.ExitCode + ":" +
-                errors.Result[..Math.Min(1024, errors.Result.Length)]);
-    }
+    private Task UnregisterTaskAsync(CancellationToken token) =>
+        M195WindowsPostbootRegistration.UnregisterVerifiedTaskAsync(_state, token);
+
 }
