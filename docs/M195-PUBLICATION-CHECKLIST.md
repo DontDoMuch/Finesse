@@ -11,11 +11,11 @@
 - [ ] Audit installation behavior for secrets, hidden destructive operations, and unexplained trust changes
 - [ ] Confirm the repository license is an intentional choice: PolyForm Noncommercial is source-available, not OSI open source
 
-## Portable build and CI
+## System-installed .NET build and CI
 
-- [ ] .NET 10 `global.json` with deliberate roll-forward policy
-- [ ] Developer build succeeds via `Get-Command dotnet` and `$PSScriptRoot`, no machine-specific paths
-- [ ] One `build.ps1` used locally and by GitHub Actions, pinned action revisions and least-privilege permissions
+- [ ] Normal system-wide .NET 10 SDK installation, discoverable on `PATH`; `global.json` selects installed version with deliberate roll-forward policy
+- [ ] Developer build succeeds via `Get-Command dotnet` and `$PSScriptRoot`, no machine-specific or portable SDK paths; no implicit SDK downloads
+- [ ] One `build.ps1` used locally and by GitHub Actions, with the .NET SDK installed on the Windows runner; pinned action revisions and least-privilege permissions
 - [ ] All external process exit codes, compiler warnings, test results and output hashes verified
 - [ ] Full test suite runs on clean Windows host, including per-profile and release-specific package transforms
 - [ ] A full-source checkout produces a runnable EXE with no private-only compile symbol or manual file injection
