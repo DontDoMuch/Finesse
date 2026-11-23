@@ -46,6 +46,20 @@
 - [ ] Implement real GUI-specific Windows lifecycle adapters; source-only interfaces are not a production integration
 - [ ] Preserve real M191/M192 14/14 catalog trust, baseline rollback, scoped cleanup, AMD Settings MSI, and one planned reboot in that live integration
 
+## M195 native Windows adapter (new)
+
+- [x] Reopen/checksum the frozen M194 source before porting native driver functionality
+- [x] Implement SetupAPI/CfgMgr32 read-only present Display hardware and PnP driver observation with exact hardware routing
+- [x] Preserve frozen Go 1 revisionless ID discovery fallback without accepting a conflicting explicit revision; require full exact Go S / Go 2 IDs
+- [x] Implement healthy original OEM package export using native Windows `pnputil /export-driver`, file/manifest SHA-256 checks and isolated evidence
+- [x] Provide concrete real Windows actions for Steps 1–7 (source+baseline+unsigned catalog), with explicit refusal of unsupported live signing/MSI/reboot
+- [x] Port M179-style read-only exact proposed bind identity/INF preflight and native Step 9 provisional Code 43 preboot observer
+- [x] Add synthetic and native read-only Windows runner regression tests for hardware/backup/INF/preboot classification
+- [ ] Physically verify native device identification and baseline export on supported Go hardware (CI has no Legion Go)
+- [ ] Port exact M175/M179 **one live signer + 14/14 dual trust + SetupAPI stage/NewDev bind** into the public source
+- [ ] Port M140 AMD Software MSI and M182 one-reboot/postboot observation/recovery operations
+- [ ] Connect the complete real adapter to the user-facing 12-step GUI, then prove clean source build and physical Code 0
+
 ## Compatibility and lifecycle (do not silently omit)
 
 - [ ] Exact Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme hardware routing; reject unsupported variants
