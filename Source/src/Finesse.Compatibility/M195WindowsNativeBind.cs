@@ -285,7 +285,22 @@ public static class M195WindowsNativeBind
         return matchingInf[0];
     }
 
-    private sealed record RecoveryEvidence(bool ApiAccepted, int WindowsError,
+    internal static async Task<RecoveryEvidence> RestoreAfterStep8FailureAsync(
+        BindReceipt bound, M195LifecycleSequence.AssignedDriver original,
+        M195LifecycleSequence.Baseline baseline)
+    {
+        ArgumentNullException.ThrowIfNull(bound);
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(baseline);
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Recovery requires Windows.");
+        // Reverify every backup file immediately before recovery, rather than
+        // trusting the Step-3 flag or the published INF name alone.
+        string? backupInf = VerifyRecoveryExport(original, baseline);
+        return await TryRestoreAsync(bound.Plan, backupInf);
+    }
+
+    internal sealed record RecoveryEvidence(bool ApiAccepted, int WindowsError,
         bool RebootRequired, string? ObservedInf, string? ObservedVersion,
         uint? ObservedProblemCode, bool ConfirmedCode0, string Status);
 
