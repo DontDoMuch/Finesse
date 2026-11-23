@@ -825,6 +825,50 @@ Reject(() => M195WindowsBindIdentity.RequirePublishedOemInf("display.inf"),
     "native stage published INF disallows arbitrary INF name");
 
 
+
+// Actual Windows Step 9 classifier is read-only and reusable from the future
+// live binder. Exact target INF/version + Code43 is provisional only.
+foreach (HandheldProfile p in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    const string driverVersion = "32.0.32015.16001";
+    var actual = DisplayFor(p, inf: "oem49.inf", problem: 43) with {
+        Version = driverVersion
+    };
+    var device = new L.Device(actual.InstanceId, p.HardwareId, p);
+    var bound = new L.BoundDriver("oem49.inf", driverVersion,
+        new string('B', 64), 14, true, true, true);
+    var preparedGpu = new M195WindowsGpuInventory.ExactGpu(actual, p);
+    L.PrebootObservation provisional =
+        M195WindowsPrebootObservation.Classify(device, bound, preparedGpu);
+    Check(provisional.Classification == L.PrebootState.Code43AwaitingPostboot,
+        "native Step9 Code43 pending real postboot, not target success " + p.Id);
+    L.PrebootObservation healthy = M195WindowsPrebootObservation.Classify(
+        device, bound, preparedGpu with {
+            Display = actual with { ProblemCode = 0 }
+        });
+    Check(healthy.Classification == L.PrebootState.Code0AwaitingPostboot,
+        "native Step9 exact driver Code0 before reboot " + p.Id);
+    L.PrebootObservation wrongInf = M195WindowsPrebootObservation.Classify(
+        device, bound, preparedGpu with {
+            Display = actual with { PublishedInf = "oem41.inf" }
+        });
+    Check(wrongInf.Classification == L.PrebootState.Reject,
+        "native Step9 rejects wrong staged INF " + p.Id);
+    L.PrebootObservation wrongVersion = M195WindowsPrebootObservation.Classify(
+        device, bound, preparedGpu with {
+            Display = actual with { Version = "32.0.32015.7029" }
+        });
+    Check(wrongVersion.Classification == L.PrebootState.Reject,
+        "native Step9 rejects wrong GPU driver version " + p.Id);
+    Reject(() => M195WindowsPrebootObservation.Classify(
+        device, bound, preparedGpu with {
+            Display = actual with { InstanceId = "PCI\\DIFFERENT_DEVICE_INSTANCE" }
+        }),
+        "native Step9 rejects changed GPU device instance " + p.Id);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
