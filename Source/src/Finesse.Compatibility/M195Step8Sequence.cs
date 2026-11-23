@@ -54,11 +54,16 @@ public static class M195Step8Sequence
             HandheldProfiles.Resolve(context.Device.ExactHardwareId) ||
             string.IsNullOrWhiteSpace(context.Device.InstanceId) ||
             string.IsNullOrWhiteSpace(context.Original.Version) ||
-            context.Original.ProblemCode != 0 ||
-            !context.Original.BackupEligible ||
-            !context.Baseline.Verified ||
-            string.IsNullOrWhiteSpace(context.Baseline.VerifiedExportDirectory))
-            throw new InvalidDataException("M195_STEP8_HEALTHY_EXPORTED_BASELINE_REQUIRED");
+            string.IsNullOrWhiteSpace(context.Original.PublishedInf) ||
+            (context.Device.Profile != HandheldProfiles.Go1 &&
+             (!context.Original.BackupEligible ||
+              !context.Baseline.Verified ||
+              string.IsNullOrWhiteSpace(context.Baseline.VerifiedExportDirectory))) ||
+            (context.Baseline.Verified &&
+             (string.IsNullOrWhiteSpace(context.Baseline.VerifiedExportDirectory) ||
+              !string.Equals(context.Baseline.RecoveryInf,
+                  context.Original.PublishedInf, StringComparison.OrdinalIgnoreCase))))
+            throw new InvalidDataException("M195_STEP8_BASELINE_POLICY_NOT_SATISFIED");
 
         SignedPackage signed = await actions.SignOnceAsync(token);
         if (signed is null || !signed.SignedOnce || !signed.TrustRetained ||
