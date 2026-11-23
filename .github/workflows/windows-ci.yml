@@ -1,6 +1,6 @@
 # M195: two distinct claims. The vendor-free offline compatibility core can pass
 # while the full public installer source gate remains explicitly incomplete.
-name: M195 Windows compatibility and source-build gates
+name: M195 offline compatibility checks (NOT the full installer)
 
 on:
   workflow_dispatch:
@@ -48,7 +48,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Combined offline INF+DAT candidate verifier failed to compile" }
 
   public-installer-source-gate:
-    name: Full public installer (BLOCKED until redistributable source is complete)
+    # This MUST NOT make every offline-source commit look like a failed CI
+    # release build. Run explicitly for a full-installer source readiness audit.
+    # When the source is absent it deliberately fails, never returns false green.
+    if: github.event_name == 'workflow_dispatch'
+    name: Full installer source gate (manual; expected BLOCKED until complete)
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
