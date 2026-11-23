@@ -1025,6 +1025,69 @@ if (OperatingSystem.IsWindows())
         "native catalog membership rejects mismatched content hash BEFORE enumeration");
 }
 
+
+// M194 M191 full dual-catalog evidence: 14 exact AMD bytes, original + local
+// SignTool membership, and original + local Windows registered membership.
+var dualVerifiedMembers = M195AmdDualTrustTargets.For26111.Select(t =>
+    new M195DualCatalogCoverage.FileEvidence(t.Relative, t.OriginalSha256,
+        true, true, true, true)).ToArray();
+M195DualCatalogCoverage.Snapshot FullDualSnapshot(
+    IReadOnlyList<M195DualCatalogCoverage.FileEvidence> members) =>
+    new(true, true, true, true, true, members);
+var allDual = M195DualCatalogCoverage.Evaluate(
+    FullDualSnapshot(dualVerifiedMembers));
+Check(allDual.DualTrustVerified && allDual.OriginalCoverage == 14 &&
+      allDual.LocalCoverage == 14 && allDual.RegisteredOriginalCoverage == 14 &&
+      allDual.RegisteredLocalCoverage == 14 &&
+      !allDual.OriginalCatalogRegistrationSuggested &&
+      allDual.MissingEvidence.Count == 0,
+    "M191 four independent 14/14 coverage proofs produce full dual trust");
+
+var missingOriginalRegistration = dualVerifiedMembers.Select(
+    m => m with { RegisteredOriginalCatalogFound = false }).ToArray();
+var incompleteDual = M195DualCatalogCoverage.Evaluate(
+    FullDualSnapshot(missingOriginalRegistration));
+Check(!incompleteDual.DualTrustVerified &&
+      incompleteDual.OriginalCoverage == 14 &&
+      incompleteDual.RegisteredOriginalCoverage == 0 &&
+      incompleteDual.OriginalCatalogRegistrationSuggested &&
+      incompleteDual.MissingEvidence.Count == 14,
+    "M191 missing original registered catalog must not claim dual trust, but permits targeted remediation");
+
+var onlyCatalogFilesPresent = M195DualCatalogCoverage.Evaluate(
+    FullDualSnapshot(dualVerifiedMembers.Select(m => m with {
+        OriginalCatalogMemberVerified = false,
+        LocalCatalogMemberVerified = false }).ToArray()));
+Check(!onlyCatalogFilesPresent.DualTrustVerified &&
+      !onlyCatalogFilesPresent.OriginalCatalogRegistrationSuggested,
+    "catalog registration without independently verified 14 file memberships is not dual trust");
+
+var badKernelSignature = M195DualCatalogCoverage.Evaluate(
+    new M195DualCatalogCoverage.Snapshot(true, true, true, false,
+        true, dualVerifiedMembers));
+Check(!badKernelSignature.DualTrustVerified &&
+      !badKernelSignature.OriginalCatalogRegistrationSuggested,
+    "original AMD CAT without kernel-signature policy cannot authorize registration");
+
+var wrongDriverStoreCatalog = M195DualCatalogCoverage.Evaluate(
+    new M195DualCatalogCoverage.Snapshot(true, false, true, true,
+        true, dualVerifiedMembers));
+Check(!wrongDriverStoreCatalog.DualTrustVerified &&
+      !wrongDriverStoreCatalog.OriginalCatalogRegistrationSuggested,
+    "catalog on disk is insufficient if published Driver Store CAT differs");
+
+Reject(() => M195DualCatalogCoverage.Evaluate(FullDualSnapshot(
+    dualVerifiedMembers[..13])),
+    "refuse incomplete 13/14 driver critical-file evidence");
+Reject(() => M195DualCatalogCoverage.Evaluate(FullDualSnapshot(
+    dualVerifiedMembers.Select((m, i) => i == 0
+        ? m with { Sha256 = new string('0', 64) } : m).ToArray())),
+    "refuse expected AMD binary modified even if all catalog booleans true");
+Reject(() => M195DualCatalogCoverage.Evaluate(FullDualSnapshot(
+    dualVerifiedMembers.Select((m, i) => i == 0
+        ? dualVerifiedMembers[1] : m).ToArray())),
+    "refuse duplicate critical-file evidence masquerading as 14/14");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
