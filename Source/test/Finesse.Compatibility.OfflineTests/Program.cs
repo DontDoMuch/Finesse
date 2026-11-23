@@ -1506,6 +1506,37 @@ Check(noRealBoot.Calls.Contains("ObserveFirstPostboot") &&
       !noRealBoot.Calls.Contains("RecoverPostboot"),
     "same boot first snapshot is recorded before reboot check, never rollback");
 
+
+// Lifecycle Step12 cannot claim target success on mismatched native state,
+// even when the GPU reports Code0 and AMD Software is present.
+foreach (var caseSpec in new (string Name, FakeM195Lifecycle Fake)[] {
+    ("wrong published INF", new() { PostbootPublishedInf = "oem998.inf" }),
+    ("wrong driver version", new() { PostbootObservedVersion = "0.0.0.0" }),
+    ("wrong physical instance", new() { PostbootObservedInstanceId = "PCI\\WRONG" }),
+    ("AMD software absent", new() { PostbootSoftwareInstalled = false }),
+    ("provisional Code43", new() { PostbootProblemCode = 43 })
+})
+{
+    var ticketCase = await L.RunPrebootAsync(caseSpec.Fake);
+    var observedCase = await L.RunPostbootAsync(ticketCase, caseSpec.Fake);
+    Check(observedCase.Status == L.PostbootState.TargetFailedRecovered &&
+          !observedCase.TargetDriverConfirmed &&
+          caseSpec.Fake.Calls.IndexOf("ObserveFirstPostboot") <
+          caseSpec.Fake.Calls.IndexOf("RecoverPostboot"),
+        "Step12 rejects false Code0/software success and observes before recovery: " +
+        caseSpec.Name);
+}
+var incompleteRollback = new FakeM195Lifecycle {
+    PostbootProblemCode = 43, PostbootRecoveryVerified = false
+};
+var incompleteTicket = await L.RunPrebootAsync(incompleteRollback);
+var incompleteOutcome = await L.RunPostbootAsync(incompleteTicket, incompleteRollback);
+Check(incompleteOutcome.Status == L.PostbootState.TargetFailedRecoveryUnverified &&
+      !incompleteOutcome.TargetDriverConfirmed &&
+      incompleteRollback.Calls.IndexOf("ObserveFirstPostboot") <
+      incompleteRollback.Calls.IndexOf("RecoverPostboot"),
+    "Step12 rollback that did not achieve Code0 cannot be reported as successful target");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
@@ -1517,6 +1548,11 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     public bool UseGo2 { get; init; }
     public int DualTrustedCount { get; init; } = 14;
     public int PostbootProblemCode { get; init; }
+    public bool PostbootSoftwareInstalled { get; init; } = true;
+    public bool PostbootRecoveryVerified { get; init; } = true;
+    public string? PostbootPublishedInf { get; init; }
+    public string? PostbootObservedVersion { get; init; }
+    public string? PostbootObservedInstanceId { get; init; }
     public string PostbootIdentity { get; init; } = "2026-11-23T01:00:00.0000000+00:00";
     private L.Device Device => new("PCI\\VEN_1002&FAKE_INSTANCE",
         (UseGo2 ? HandheldProfiles.Go2 : HandheldProfiles.Go1).HardwareId,
@@ -1651,14 +1687,19 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     {
         Calls.Add("ObserveFirstPostboot");
         return Task.FromResult(new L.PostbootObservation(
-            pending.InstanceId, pending.ExpectedPublishedInf,
-            pending.ExpectedDriverVersion, PostbootProblemCode, true, PostbootIdentity));
+            PostbootObservedInstanceId ?? pending.InstanceId,
+            PostbootPublishedInf ?? pending.ExpectedPublishedInf,
+            PostbootObservedVersion ?? pending.ExpectedDriverVersion,
+            PostbootProblemCode, PostbootSoftwareInstalled, PostbootIdentity));
     }
     public Task<L.RecoveryResult> RecoverBaselineAsync(
         L.PendingPostboot pending, L.PostbootObservation first, CancellationToken token)
     {
         Calls.Add("RecoverPostboot");
-        return Task.FromResult(new L.RecoveryResult(true, pending.OriginalPublishedInf, 0));
+        return Task.FromResult(new L.RecoveryResult(
+            PostbootRecoveryVerified,
+            PostbootRecoveryVerified ? pending.OriginalPublishedInf : null,
+            PostbootRecoveryVerified ? 0 : 43));
     }
 }
 
