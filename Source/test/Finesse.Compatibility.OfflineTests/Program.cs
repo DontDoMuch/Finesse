@@ -501,4 +501,34 @@ Reject(() => Amd26111ArchiveExtraction.BuildPinnedOriginalSelection(
             new string('0', 64) + "  u0206030.inf", StringComparison.Ordinal)),
     "selection cannot be derived from tampered original AMD metadata");
 
+
+// Official AMD network allowlist tests; these do not make HTTP requests.
+const string pinnedReleaseName = "amd-software-adrenalin-edition-26.11.1-win11-c.exe";
+Check(OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://drivers.amd.com/drivers/" + pinnedReleaseName)) &&
+      OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://download.amd.com/drivers/" + pinnedReleaseName)),
+      "allow only exact AMD official-host HTTPS release URL");
+Check(!OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("http://drivers.amd.com/drivers/" + pinnedReleaseName)) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://evil.drivers.amd.com/drivers/" + pinnedReleaseName)) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://example.com/drivers/" + pinnedReleaseName)) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://user@drivers.amd.com/drivers/" + pinnedReleaseName)),
+      "reject untrusted hosts, HTTP, and authenticated userinfo");
+Check(!OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://drivers.amd.com/drivers/" + pinnedReleaseName + "?redirect=1")) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://drivers.amd.com/drivers/" + pinnedReleaseName + "#extra")) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://www.amd.com/Download-Incomplete.html")),
+      "reject query strings, fragments, and AMD's download error HTML");
+Check(!OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://drivers.amd.com/drivers/other-release.exe")) &&
+      !OfficialAmd26111Downloader.IsApprovedDownloadUri(
+        new Uri("https://drivers.amd.com:444/drivers/" + pinnedReleaseName)),
+      "reject different release or nonstandard port");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
