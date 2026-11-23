@@ -2,6 +2,10 @@
 
 **Status:** Source and offline tests exist on the M195 draft branch. This is **NOT the finished Finesse GUI**, a signed package, an installer, or physical Legion Go validation.
 
+A new `OfficialAmd26111Downloader.DownloadFreshAsync` component can also acquire the **exact pinned official AMD 26.11.1 EXE** over HTTPS without manually locating the EXE. It uses the frozen M121 official-host allowlist (only `drivers.amd.com` / `download.amd.com`), restricted redirects and AMD referer retry, streaming size/SHA checks, then full Windows WinVerifyTrust publisher validation. It does not execute the EXE. Any different filename, hash, size, host, or redirect is rejected; no unofficial mirrors are used.
+
+The standalone CLI below still accepts an existing original AMD EXE path. The new downloader is a reusable code component for the eventual GUI; **a real network acquisition with this new implementation has not been executed as part of public GitHub CI**.
+
 The preparation engine now has two source-first phases:
 
 1. `OfficialAmdInstallerVerifier.Verify26111Async`: verifies the **exact** official AMD 26.11.1 EXE filename, byte length, SHA-256 and actual Windows WinVerifyTrust Authenticode signer, rehashing the source afterward.
@@ -37,7 +41,7 @@ dotnet run --project Source/tools/Finesse.OfficialSourcePreparation/Finesse.Offi
 
 Supported `--profile`: `Go1`, `GoS`, `Go2`. The `--output-root` must not exist. The tool uses isolated subfolders for verified original extraction and unsigned candidate. It writes evidence files and hashes, not an installable Windows driver.
 
-**Current validation limits:** Windows CI compiles this CLI and runs synthetic negative cases, device-routing cases, MetroHash/DAT transforms, INF cloning, the public 194-line manifest, 195-file original extraction-selection checks, and the unsigned 194-file staging tests. **CI does not download or execute the real 1.8 GB AMD installer**, and has not executed 7zr against that package. Real-source end-to-end extraction and physical postboot Code 0 must be measured separately.
+**Current validation limits:** Windows CI compiles this CLI and runs synthetic negative cases (including the official AMD download URL/redirect allowlist), device-routing cases, MetroHash/DAT transforms, INF cloning, the public 194-line manifest, 195-file original extraction-selection checks, and the unsigned 194-file staging tests. **CI does not download or execute the real 1.8 GB AMD installer**, and has not executed 7zr against that package. Real-source end-to-end extraction and physical postboot Code 0 must be measured separately.
 
 ## Remaining GUI/source work
 
