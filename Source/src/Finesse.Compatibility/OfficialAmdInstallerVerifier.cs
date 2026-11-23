@@ -103,14 +103,17 @@ public static class OfficialAmdInstallerVerifier
     {
         token.ThrowIfCancellationRequested();
         IntPtr filePointer = IntPtr.Zero;
+        bool marshaled = false;
+        int status = unchecked((int)0x800B0100);
         try
         {
             var file = new WinTrustFileInfo(path);
             filePointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());
             Marshal.StructureToPtr(file, filePointer, false);
+            marshaled = true;
             var data = new WinTrustData(filePointer);
             Guid actionId = GenericVerifyV2;
-            int status = WinVerifyTrust(IntPtr.Zero, ref actionId, ref data);
+            status = WinVerifyTrust(IntPtr.Zero, ref actionId, ref data);
             if (status != 0)
                 return (status, string.Empty, string.Empty);
 
@@ -132,7 +135,8 @@ public static class OfficialAmdInstallerVerifier
         {
             if (filePointer != IntPtr.Zero)
             {
-                Marshal.DestroyStructure<WinTrustFileInfo>(filePointer);
+                if (marshaled)
+                    Marshal.DestroyStructure<WinTrustFileInfo>(filePointer);
                 Marshal.FreeHGlobal(filePointer);
             }
         }
