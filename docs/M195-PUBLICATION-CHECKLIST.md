@@ -74,6 +74,19 @@
 - [ ] Add narrow original AMD catalog registration after proving its authenticity and 14 original member coverage
 - [ ] Port audited `UpdateDriverForPlugAndPlayDevicesW` binding and exact rollback, and connect these transactions to GUI Step 8
 
+## M195 frozen M191 full dual-catalog evidence and original WHCP registration
+
+- [x] Reopen frozen M194 source SHA `E7BEAB1C14F8451D0667733CAEFCBA03D284D722FAB178B100E510CF949E9AA1` and compare actual `M191-Validation.ps1` / `M115-V5-Catalog-Interop.ps1`
+- [x] Reproduce four *separate* 14-file evidence counters: original/local SignTool membership and registered original/local Windows catalog coverage
+- [x] Record signature policy and publisher separately: original WHCP Authenticode, original `/kp`, Finesse local `/pa`; don't equate file SHA with successful catalog trust
+- [x] Port native `SetupGetInfDriverStoreLocationW`, verify published OEM INF, mapped INF and mapped signed CAT against candidate hashes
+- [x] Require actual target GPU **assigned** to the expected published INF and AMD driver version; staged-only package is not installed
+- [x] Build read-only 14-member `CryptCATAdmin` / SignTool audit with machine-readable receipts; Windows test checked actual published OEM INF mapping
+- [x] Add narrowly scoped **internal** original WHCP catalog registration with exact managed-name collision check and 14-file post-registration re-audit, not connected to GUI
+- [ ] Execute real signed AMD 26.11.1 catalog 14/14 audit on a supported Windows handheld; no signed catalog or registration was exercised in public CI
+- [ ] Integrate optional original catalog registration in the correct M179 pre-bind/postbind lifecycle, without making missing optional audit evidence a new unconditional installation blocker
+- [ ] Complete native bind/recovery and verify real M195 dual catalog evidence before describing a physical installation as validated
+
 ## Compatibility and lifecycle (do not silently omit)
 
 - [ ] Exact Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme hardware routing; reject unsupported variants
