@@ -10,8 +10,8 @@ public static class Amd26111CandidateRecipe
 {
     public const string ReleaseMarker =
         "26.20.15.16-261109a-206030E-AMD-Software-Adrenalin-Edition";
-    public const string OriginalDatSha256 =
-        "2DC60D0B41488E504E78213B8DA1DF790E7E39AF67A892E9441F41642659E459";
+    public static string OriginalDatSha256 =>
+        OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalDatSha256;
 
     public sealed record VerifiedCandidate(
         HandheldProfile Profile,
