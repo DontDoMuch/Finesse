@@ -25,9 +25,11 @@ dotnet --info
 .\build.ps1
 ```
 
-The future `build.ps1` must resolve the **system-installed** CLI with `Get-Command dotnet -CommandType Application -ErrorAction Stop`, use `$PSScriptRoot` for repository-relative paths, verify `dotnet --version` and its exit code against the SDK requirement, run restore/build/tests, publish a **self-contained Windows x64 single-file EXE**, check every native process exit code, and produce a SHA-256 manifest. CI must run **the same script**.
+The M195 branch now includes `build.ps1`, which resolves the **system-installed** CLI with `Get-Command dotnet -CommandType Application -ErrorAction Stop`, use `$PSScriptRoot` for repository-relative paths, verify `dotnet --version` and its exit code against the SDK requirement, run restore/build/tests, publish a **self-contained Windows x64 single-file EXE**, check every native process exit code, and produce a SHA-256 manifest. CI must run **the same script**.
 
-A repository `global.json` selects a compatible system-installed .NET 10 SDK with a declared roll-forward policy. **It does not install .NET, define an environment variable, or specify an absolute filesystem path.** System-wide discovery comes from `PATH`, not from manually manipulating `DOTNET_ROOT` or assuming the maintainer's SDK directory.
+The M195 branch also includes `global.json` selecting an installed .NET 10 SDK with `latestFeature` roll-forward. **It does not install .NET, define an environment variable, or specify an absolute filesystem path.** System-wide discovery comes from `PATH`, not from manually manipulating `DOTNET_ROOT` or assuming the maintainer's SDK directory.
+
+**Current behavior:** The script intentionally fails with `M195_PUBLIC_SOURCE_NOT_PUBLISHED` while the full public source is absent. The Windows CI workflow calls the same script and cannot legitimately succeed or publish an executable until that blocker and the private-resource guards are resolved. The presence of a workflow file alone is not CI build proof. See [source audit](docs/M195-SOURCE-AUDIT.md).
 
 ## Blockers before a genuine public build
 
