@@ -143,6 +143,7 @@ public static class M195WindowsNativeBind
             out bool rebootRequired);
         int win32 = nativeAccepted ? 0 : Marshal.GetLastWin32Error();
         M195WindowsGpuInventory.ExactGpu? after = null;
+        string? observationError = null;
         if (nativeAccepted)
         {
             for (int i = 0; i < 6; i++)
@@ -153,7 +154,14 @@ public static class M195WindowsNativeBind
                         await M195WindowsGpuInventory.EnumerateAsync(CancellationToken.None));
                     if (IsExpectedAssigned(plan, after)) break;
                 }
-                catch (InvalidDataException) { }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // A native observation failure must not escape after a
+                    // mutating bind without attempting recovery and recording
+                    // the error. Do not treat a stale prior sample as success.
+                    observationError = ex.GetType().Name + ": " + ex.Message;
+                    after = null;
+                }
                 if (i != 5)
                     await Task.Delay(900, CancellationToken.None);
             }
@@ -163,7 +171,14 @@ public static class M195WindowsNativeBind
             after!.Display.ProblemCode is 0 or 43;
         if (!nativeAccepted || !pendingHealthyOrCode43)
         {
-            var recovery = await TryRestoreAsync(plan, backupInf);
+            RecoveryEvidence recovery;
+            try { recovery = await TryRestoreAsync(plan, backupInf); }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                recovery = new(false, 0, false, null, null, null,
+                    false, "RECOVERY_EXCEPTION_REQUIRES_REVIEW:" +
+                    ex.GetType().Name + ":" + ex.Message);
+            }
             await WriteAsync(evidence, new {
                 Schema = "Finesse.M195.NativeBind.v1",
                 Phase = nativeAccepted ? "BIND_ASSIGNMENT_REJECTED" : "BIND_NATIVE_API_FAILED",
@@ -172,6 +187,7 @@ public static class M195WindowsNativeBind
                 ObservedInf = after?.Display.PublishedInf,
                 ObservedVersion = after?.Display.Version,
                 ObservedProblem = after?.Display.ProblemCode,
+                ObservationError = observationError,
                 Recovery = recovery, RestartRequested = false,
                 TargetPostbootCode0Verified = false
             });
