@@ -1003,6 +1003,28 @@ Check(M195AmdDualTrustTargets.For26111.Any(t =>
             OfficialAmd26111SourceContract.VerifiedFrozenM194.OriginalKernelSha256),
       "kernel and AMDXC critical graphics hashes are preserved from authenticated original");
 
+
+// Ported frozen M115 native Windows CryptCATAdmin v2c logic: read-only
+// lookup against a runner system file, never registration or machine mutation.
+if (OperatingSystem.IsWindows())
+{
+    string signedCandidate = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.System),
+        "WindowsPowerShell", "v1.0", "powershell.exe");
+    Check(File.Exists(signedCandidate),
+        "native CryptCATAdmin test has a Windows system file");
+    IReadOnlyList<string> registered =
+        M195WindowsCatalogRegistry.EnumerateForFile(signedCandidate);
+    Check(registered.All(File.Exists),
+        "native CryptCATAdmin successfully enumerates readable catalog paths without mutation");
+    Console.WriteLine("M195_NATIVE_CATALOG_REGISTRATIONS=" + registered.Count);
+    Reject(() => M195WindowsCatalogRegistry.ObserveDualMembership(
+        signedCandidate, new string('0', 64),
+        M195LiveSigningPreflight.PinnedOriginalAmdMainCatalogSha256,
+        new string('1', 64)),
+        "native catalog membership rejects mismatched content hash BEFORE enumeration");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
