@@ -64,13 +64,20 @@ internal static class Program
 
     internal static async Task<M195WindowsFullLifecycleActions> CreateActionsAsync(
         string sessionRoot, IProgress<string>? toolProgress,
-        CancellationToken token)
+        IProgress<string>? identifiedDevice, CancellationToken token)
     {
         // The exact physical display adapter is read-only inspected before
         // composing its corresponding frozen 26/30/28 policy; never use a
         // manual profile selector or a wildcard hardware match.
         var gpu = M195WindowsGpuInventory.RequireUniqueExactGpu(
             await M195WindowsGpuInventory.EnumerateAsync(token));
+        identifiedDevice?.Report(gpu.Profile.Id switch
+        {
+            "LegionGo1" => "Lenovo Legion Go 1",
+            "LegionGoS-Z1Extreme" => "Lenovo Legion Go S — Z1 Extreme",
+            "LegionGo2-Z2Extreme" => "Lenovo Legion Go 2 — Z2 Extreme",
+            _ => gpu.Profile.Id
+        });
         string policy = M195FrozenProfileRegistryPolicies.RequireAuthorized(
             gpu.Profile);
         M195PinnedToolBootstrap.Tools tools =
