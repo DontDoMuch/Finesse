@@ -60,6 +60,20 @@
 - [ ] Port M140 AMD Software MSI and M182 one-reboot/postboot observation/recovery operations
 - [ ] Connect the complete real adapter to the user-facing 12-step GUI, then prove clean source build and physical Code 0
 
+## M195 M179/M191 signing and dual-trust migration
+
+- [x] Verify M194 frozen `M175SigningOperation`, `M179StageBindOperation`, `M179SignerCleanup`, `M191Validation` and M115 catalog interop before porting
+- [x] Add source-based M179 **retained** LocalMachine signer with single catalog signing, `/pa` / INF verification and exact signer proof; retain public trust for the staged driver
+- [x] Validate full 194-file candidate, authentic original AMD main CAT and SHA-pinned Microsoft SignTool before signer creation; recheck 194 hashes immediately before and after signing
+- [x] Parse live signing script through **actual Windows PowerShell 5.1** in CI without invoking certificate changes
+- [x] Add native `SetupCopyOEMInfW` stage-only port with exact staged INF SHA check and scoped new-signer cleanup only if the native stage API reports failure
+- [x] Publish exact 14 critical original graphics member path/SHA contracts from frozen M191/M115, no vendor binaries
+- [x] Port corrected M115 SHA-256 `CryptCATAdmin` catalog lookup read-only and run the native enumeration on Windows CI
+- [ ] Execute real stage/sign operation against authenticated AMD candidate in a test Windows environment, preserving source and recovery evidence
+- [ ] Add source-backed **14/14 local + original coverage** including genuine WHCP `/kp`, `/pa`, installed Driver Store mapping and registered catalog re-enumeration
+- [ ] Add narrow original AMD catalog registration after proving its authenticity and 14 original member coverage
+- [ ] Port audited `UpdateDriverForPlugAndPlayDevicesW` binding and exact rollback, and connect these transactions to GUI Step 8
+
 ## Compatibility and lifecycle (do not silently omit)
 
 - [ ] Exact Go 1 Z1 Extreme, Go S Z1 Extreme, Go 2 Z2 Extreme hardware routing; reject unsupported variants
