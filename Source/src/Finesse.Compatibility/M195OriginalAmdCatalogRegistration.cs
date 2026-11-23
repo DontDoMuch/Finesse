@@ -26,7 +26,8 @@ internal static class M195OriginalAmdCatalogRegistration
         bool RegisteredOriginal14Of14,
         bool DualTrust14Of14,
         string Action, string BeforeEvidence,
-        string AfterEvidence, string ReceiptFile);
+        string AfterEvidence, string ReceiptFile,
+        M195DualCatalogCoverage.Assessment FinalAssessment);
 
     /// <summary>
     /// The ONLY mutating method. It first performs a fresh, independently
@@ -120,7 +121,7 @@ internal static class M195OriginalAmdCatalogRegistration
         await File.WriteAllTextAsync(receipt, summary, token);
         return new Result(d.RegisteredOriginalCoverage != 14, mutated,
             done.OriginalCoverage == 14, done.RegisteredOriginalCoverage == 14,
-            done.DualTrustVerified, action, before, after, receipt);
+            done.DualTrustVerified, action, before, after, receipt, done);
     }
 
     private static string AddExactlyOneCatalog(string catalogFile, string selectedBaseName)
