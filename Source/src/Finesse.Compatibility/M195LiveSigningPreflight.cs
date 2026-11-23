@@ -20,7 +20,8 @@ public static class M195LiveSigningPreflight
         string PreparedInf, string PreparedDat, string UnsignedMainCatalog,
         string OriginalAmdCatalog, string PinnedSignTool,
         string PackageRoot, string EvidenceDirectory,
-        string UnsignedCatalogSha256, string CandidateInventorySha256);
+        string UnsignedCatalogSha256, string CandidateInventorySha256,
+        IReadOnlyDictionary<string, string> ExpectedMemberHashes);
 
     public static Verified Validate(
         AmdSourceFirstStager.UnsignedStageResult staged,
@@ -90,6 +91,9 @@ public static class M195LiveSigningPreflight
             if (!expected.TryAdd(proof.Relative, sha))
                 throw new InvalidDataException("M195_LIVE_SIGN_DUPLICATE_FILE_CONTRACT");
         }
+        IReadOnlyDictionary<string, string> fullExpected =
+            new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(
+                new Dictionary<string, string>(expected, StringComparer.OrdinalIgnoreCase));
         string[] sourceFiles = Directory.GetFiles(root, "*", SearchOption.AllDirectories);
         if (sourceFiles.Length != 195)
             throw new InvalidDataException("M195_LIVE_SIGN_EXPECTED_194_PLUS_UNSIGNED_CAT");
@@ -115,7 +119,7 @@ public static class M195LiveSigningPreflight
             throw new InvalidDataException("M195_LIVE_SIGN_TRANSACTION_ALREADY_USED");
 
         return new Verified(inf, dat, catalog, originalCatalog, signTool,
-            root, evidence, unsigned.Sha256, candidateManifest);
+            root, evidence, unsigned.Sha256, candidateManifest, fullExpected);
     }
 
     public static bool IsOwnedSigner(string? thumbprint, string? subject) =>
