@@ -11,10 +11,12 @@ if (args.Length == 1 && args[0] == "--pinned-tool-runtime-probe")
     M195PinnedToolBootstrap.Tools tools =
         await M195PinnedToolBootstrap.EnsureAsync(
             cacheRoot: null, new Progress<string>(Console.WriteLine));
-    if (M195PinnedToolBootstrap.RequiredPortableInf2CatFiles != 5 ||
+    if (M195PinnedToolBootstrap.RequiredPortableInf2CatFiles != 6 ||
         !File.Exists(tools.Inf2CatExe) ||
         !File.Exists(Path.Combine(Path.GetDirectoryName(tools.Inf2CatExe)!,
-            "Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll")))
+            "Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll")) ||
+        !File.Exists(Path.Combine(Path.GetDirectoryName(tools.Inf2CatExe)!,
+            "WindowsProtectedFiles.xml")))
         throw new InvalidDataException(
             "M195_RUNTIME_PROBE_MISSING_PINNED_INF2CAT_DEPENDENCIES");
     Console.WriteLine("M195_RUNTIME_PINNED_INF2CAT_PASS");
@@ -1774,7 +1776,7 @@ foreach (var group in new[] {
               System.Text.Encoding.Latin1.GetBytes(policy))) == group.ExpectedSha,
         "M194 frozen exact profile HKR rows match independent SHA for " + group.Profile.Id);
 }
-Check(M195PinnedToolBootstrap.RequiredPortableInf2CatFiles == 5 &&
+Check(M195PinnedToolBootstrap.RequiredPortableInf2CatFiles == 6 &&
       M195PinnedToolBootstrap.FrozenDownloadPins.Count == 4 &&
       M195PinnedToolBootstrap.FrozenDownloadPins.All(x =>
           x.Url.StartsWith("https://", StringComparison.Ordinal) &&
