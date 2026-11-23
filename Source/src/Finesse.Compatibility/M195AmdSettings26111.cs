@@ -109,5 +109,29 @@ public static class M195AmdSettings26111
         return output.AsReadOnly();
     }
 
+    /// <summary>
+    /// Centrally owned silent MSI command contract. /qn prevents the
+    /// previously observed visible AMD Settings downgrade prompt, while
+    /// /norestart defers the one planned reboot until AFTER Step 10.
+    /// </summary>
+    public static IReadOnlyList<string> BuildMsiexecArguments(
+        bool install, string target, string newVerboseLog)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newVerboseLog);
+        if (!newVerboseLog.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+            (install && !target.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("M195_MSI_INVALID_TARGET_OR_LOG");
+        if (!install)
+        {
+            if (!Guid.TryParseExact(target, "B", out Guid product) ||
+                string.Equals(product.ToString("B"), ProductCode,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("M195_MSI_UNINSTALL_MUST_BE_RELATED_BLOCKER_NOT_TARGET");
+        }
+        return [install ? "/i" : "/x", target,
+            "/qn", "/norestart", "/L*V", newVerboseLog];
+    }
+
     public static bool IsTargetMsiSuccess(int exitCode) => exitCode is 0 or 3010;
 }
