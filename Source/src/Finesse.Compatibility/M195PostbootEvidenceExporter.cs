@@ -105,8 +105,11 @@ internal static class M195PostbootEvidenceExporter
                 }, new JsonSerializerOptions { WriteIndented = true }));
                 await outStream.WriteAsync(json, token);
             }
-            using FileStream zipBytes = File.OpenRead(temporary);
-            string zipSha = Convert.ToHexString(SHA256.HashData(zipBytes));
+            string zipSha;
+            using (FileStream zipBytes = File.OpenRead(temporary))
+                zipSha = Convert.ToHexString(SHA256.HashData(zipBytes));
+            // The SHA reader MUST be closed before rename on Windows, which
+            // denies a File.Move while our own FileShare.Read handle is open.
             File.Move(temporary, finalZip, overwrite: false);
             await File.WriteAllTextAsync(shaFile,
                 zipSha + "  " + Path.GetFileName(finalZip) + "\n",
