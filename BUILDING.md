@@ -61,6 +61,16 @@ It requires an authentic original AMD extraction and authorized profile policy. 
 
 With the original AMD source DAT legitimately extracted, independent reviewers can reproduce the exact Go 1/Go S/Go 2 SHA-256 digests. See [offline DAT verification](docs/M195-OFFLINE-DAT-VERIFICATION.md).
 
+### Authenticated official AMD source preparation (developer tool)
+
+The M195 compatibility core now contains original AMD EXE verification, source-selective 195-file extraction, and unsigned 194-file staging, with a separately pinned extractor binary and an exact-source/target SHA-256 contract. It also includes an approved-host HTTPS downloader intended for eventual GUI integration.
+
+```powershell
+dotnet build Source/tools/Finesse.OfficialSourcePreparation/Finesse.OfficialSourcePreparation.csproj -c Release
+```
+
+Read [authenticated source preparation](docs/M195-AUTHENTICATED-SOURCE-PREPARATION.md) for expected inputs, the approved AMD executable/extractor, limits and the complete developer CLI command. **This is not yet the finished Finesse installer and it does not sign or install drivers.** No portable .NET SDK is needed.
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
