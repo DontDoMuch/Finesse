@@ -25,10 +25,10 @@ Sort rows by relative path using a case-insensitive ordinal comparison, encode A
 
 | Manifest | SHA-256 |
 |---|---|
-| Original AMD 26.11.1 194 files | `C7757CFE6D743D7A6AAC33292753FEB08811CA898A43BF60B724481E24042D08` |
-| Rebuilt Go 1 candidate | `6F2533085DF9656AE168AF7D95D490E333B338D1D9181DD3C8B32A24A90A7944` |
-| Rebuilt Go S Z1 Extreme candidate | `D81432A1469DC04FFCCAE072EBE0E3B064A6DFF9E9949EFF92FA035ED8A49F1B` |
-| Rebuilt Go 2 Z2 Extreme candidate | `B5F1C78B9B929ADCE7C5BDDD54CD3A2FA03911A2117159E63266D67CA7B7E369` |
+| Original AMD 26.11.1 194 files | `8776BD900A0B669D03F8DF308B9BB5F4B323DE90C5E699D8837765AD719D7C64` |
+| Rebuilt Go 1 candidate | `00A7F9DF1BC365C4D996100D70EE85B1E945C8BA44753A8B008C00F7184298E7` |
+| Rebuilt Go S Z1 Extreme candidate | `FB4647C4EFB8F8FCCD237938B68CA4C93D15182BE05BCB2875ABFE1F20F1098F` |
+| Rebuilt Go 2 Z2 Extreme candidate | `0C08A5A88A17CFF1C62AC0A8B035F67F78DD2B11F861512B13E8970F965EE17A` |
 
 The manifest contains only file paths and hashes, not vendor content. **The exact 194-line filename/SHA-256 manifest is now published** at [`Source/contracts/releases/amd-26.11.1-original-194.sha256`](../Source/contracts/releases/amd-26.11.1-original-194.sha256). No AMD binary bytes are included. Supplying a forged or incomplete manifest fails the pinned original source identity check. The actual original AMD INF/DAT/binaries and the profile policy data still must be obtained legitimately and separately.
 
