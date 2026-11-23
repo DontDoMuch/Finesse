@@ -1445,6 +1445,67 @@ if (OperatingSystem.IsWindows())
     Check(true, "read-only native MsiQueryProductState called for exact 26.11.1 target");
 }
 
+
+// M195 M182/M191 postboot immutable transaction + monotonic boot boundary.
+var postbootTicketValid = new L.PendingPostboot(
+    "79b8509e5b1d408ab5a36dd0ba833912", "PCI\\FAKE_GPU",
+    HandheldProfiles.Go2.HardwareId, "oem71.inf",
+    OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+    OfficialAmd26111SourceContract.VerifiedFrozenM194.InstallerSha256,
+    new string('A', 64), "oem3.inf", "32.0.32015.7029",
+    "FAKE_BUT_VERIFIED_EXPORT", true,
+    "2026-11-23T00:00:00.0000000+00:00");
+M195PostbootTicketContract.RequireValid(postbootTicketValid);
+Check(M195PostbootTicketContract.TaskName(postbootTicketValid.TransactionId) ==
+        "Finesse-M195-Postboot-79b8509e5b1d408ab5a36dd0ba833912",
+    "Step11 ticket keeps exact transaction-id task name");
+Check(M195PostbootTicketContract.IsNewBoot(
+        postbootTicketValid.RegisteredBootIdentity,
+        "2026-11-23T01:00:00.0000000+00:00") &&
+      !M195PostbootTicketContract.IsNewBoot(
+        postbootTicketValid.RegisteredBootIdentity,
+        postbootTicketValid.RegisteredBootIdentity) &&
+      !M195PostbootTicketContract.IsNewBoot(
+        postbootTicketValid.RegisteredBootIdentity,
+        "2026-11-23T00:00:10.0000000+00:00") &&
+      !M195PostbootTicketContract.IsNewBoot(
+        postbootTicketValid.RegisteredBootIdentity, "INVALID_BOOT_TIME"),
+    "Step12 recovery cannot run on same boot, jitter or unparsable identity");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { OriginalDriverVersion = "" }),
+    "postboot recovery must preserve original driver version");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { VerifiedBackupDirectory = null }),
+    "Go2 postboot transaction requires preserved recovery directory");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { ExpectedPublishedInf = "outside.inf" }),
+    "postboot ticket rejects invalid signed OEM INF");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { ExpectedDriverVersion = "0.0.0.0" }),
+    "postboot ticket refuses wrong AMD driver release");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { TransactionId = "not-a-guid" }),
+    "postboot task refuses unscoped transaction ID");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { ExpectedInstallerSha256 = new string('B', 64) }),
+    "postboot ticket refuses wrong signed AMD installer source SHA");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { ExactHardwareId = "PCI\\FAKE" }),
+    "postboot ticket refuses ambiguous hardware profile");
+Reject(() => M195PostbootTicketContract.RequireValid(
+    postbootTicketValid with { RegisteredBootIdentity = "boot-A" }),
+    "postboot ticket refuses non-roundtrip UTC boot identity");
+var noRealBoot = new FakeM195Lifecycle {
+    PostbootIdentity = "2026-11-23T00:00:00.0000000+00:00",
+    PostbootProblemCode = 43
+};
+var noBootTicket = await L.RunPrebootAsync(noRealBoot);
+Reject(() => L.RunPostbootAsync(noBootTicket, noRealBoot).GetAwaiter().GetResult(),
+    "first postboot GPU observation cannot authorize recovery without reboot");
+Check(noRealBoot.Calls.Contains("ObserveFirstPostboot") &&
+      !noRealBoot.Calls.Contains("RecoverPostboot"),
+    "same boot first snapshot is recorded before reboot check, never rollback");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
@@ -1456,7 +1517,7 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     public bool UseGo2 { get; init; }
     public int DualTrustedCount { get; init; } = 14;
     public int PostbootProblemCode { get; init; }
-    public string PostbootIdentity { get; init; } = "boot-B";
+    public string PostbootIdentity { get; init; } = "2026-11-23T01:00:00.0000000+00:00";
     private L.Device Device => new("PCI\\VEN_1002&FAKE_INSTANCE",
         (UseGo2 ? HandheldProfiles.Go2 : HandheldProfiles.Go1).HardwareId,
         UseGo2 ? HandheldProfiles.Go2 : HandheldProfiles.Go1);
@@ -1560,7 +1621,7 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     {
         Calls.Add("RegisterPostboot");
         if (pending.OriginalDriverVersion != original.Version ||
-            pending.RegisteredBootIdentity != "boot-A" ||
+            pending.RegisteredBootIdentity != "2026-11-23T00:00:00.0000000+00:00" ||
             pending.OriginalPublishedInf != original.PublishedInf)
             throw new InvalidDataException("Fake pending ticket is incomplete");
         return Task.FromResult(new L.RegisteredPostboot(
@@ -1569,7 +1630,7 @@ sealed class FakeM195Lifecycle : L.IWindowsInstallationActions, L.IPostbootActio
     public Task<string> ReadPreRebootBootIdentityAsync(CancellationToken token)
     {
         Calls.Add("ReadBoot");
-        return Task.FromResult("boot-A");
+        return Task.FromResult("2026-11-23T00:00:00.0000000+00:00");
     }
     public Task RequestSingleRestartAsync(
         L.RegisteredPostboot registration, CancellationToken token)
