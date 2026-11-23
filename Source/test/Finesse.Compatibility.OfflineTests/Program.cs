@@ -1377,6 +1377,29 @@ Check(M195AmdSettings26111.IsTargetMsiSuccess(0) &&
       !M195AmdSettings26111.IsTargetMsiSuccess(1603),
     "M169 MSI return codes 0/3010 success while 1603 remains failure");
 
+
+var pinnedSettings = new M195WindowsAmdSettingsMsiIdentity.PackageIdentity(
+    M195AmdSettings26111.ProductCode, M195AmdSettings26111.UpgradeCode,
+    M195AmdSettings26111.ProductName, M195AmdSettings26111.ProductVersion,
+    "Advanced Micro Devices, Inc.");
+M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(pinnedSettings);
+Check(true, "native MSI property-table matching accepts exact M169 AMD Settings identity");
+Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
+    pinnedSettings with { ProductCode = "{11111111-1111-4111-8111-111111111111}" }),
+    "native MSI identity refuses wrong ProductCode");
+Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
+    pinnedSettings with { UpgradeCode = "{22222222-2222-4222-8222-222222222222}" }),
+    "native MSI identity refuses wrong UpgradeCode");
+Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
+    pinnedSettings with { ProductName = "AMD Link" }),
+    "native MSI identity refuses unrelated AMD program");
+Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
+    pinnedSettings with { ProductVersion = "2026.1015.1803.2112" }),
+    "native MSI identity refuses older release's product version");
+Reject(() => M195WindowsAmdSettingsMsiIdentity.RequirePinned26111(
+    pinnedSettings with { Manufacturer = "Another Vendor" }),
+    "native MSI identity refuses foreign publisher");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
