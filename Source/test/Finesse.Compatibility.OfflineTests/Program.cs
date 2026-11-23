@@ -595,6 +595,25 @@ Reject(() => L.RunPostbootAsync(beforeRealRestart, noBoot).GetAwaiter().GetResul
 Check(!noBoot.Calls.Contains("RecoverPostboot"),
       "no recovery happens without first confirmed postboot observation");
 
+
+// Real Windows WinVerifyTrust positive case: confirm the native GUID pointer,
+// trust policy, and signer extraction work on a known Microsoft-signed PE.
+// This test makes NO Windows security or driver configuration changes.
+if (OperatingSystem.IsWindows())
+{
+    string nativeSignedPe = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.System),
+        "WindowsPowerShell", "v1.0", "powershell.exe");
+    Check(File.Exists(nativeSignedPe),
+        "Windows runner has a Microsoft-signed system PowerShell executable");
+    var microsoftSignature = OfficialAmdInstallerVerifier.InspectWindowsSignature(nativeSignedPe);
+    Check(microsoftSignature.Trusted &&
+          microsoftSignature.WindowsStatus == 0 &&
+          microsoftSignature.Subject.Contains("Microsoft", StringComparison.OrdinalIgnoreCase) &&
+          !string.IsNullOrWhiteSpace(microsoftSignature.Thumbprint),
+          "actual native WinVerifyTrust accepts signed Microsoft PE and extracts signer");
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
