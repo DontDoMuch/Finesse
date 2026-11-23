@@ -1631,6 +1631,52 @@ try
           m195ZipRead.Entries.Any(e => e.FullName == "M195-Export-Manifest.json") &&
           !m195ZipRead.Entries.Any(e => e.FullName == "UserPrivateFile.txt"),
         "ZIP includes immutable first GPU snapshot and outcome but no unrelated files");
+    // A complete run carries the preboot workspace root in the durable
+    // postboot ticket. Collect source/signing/MSI receipts, NEVER any .inf,
+    // .dat, .cat, .sys, .dll, EXE or private signing key.
+    string prebootRoot = Path.Combine(m195ZipRoot, "PrebootWorkspace");
+    string prebootSign = Path.Combine(prebootRoot, "UnsignedCandidate", "Evidence");
+    string prebootRecovery = Path.Combine(prebootRoot, "OriginalDriverBackup");
+    Directory.CreateDirectory(prebootSign);
+    Directory.CreateDirectory(prebootRecovery);
+    File.WriteAllText(Path.Combine(prebootSign, "M195-Step8-Transaction.json"),
+        "{\"SignedCatalogVerified\":true}");
+    File.WriteAllText(Path.Combine(prebootSign, "M195-Inf2Cat-stdout.txt"),
+        "Inf2Cat completed successfully");
+    File.WriteAllText(Path.Combine(prebootRecovery, "SHA256SUMS.txt"),
+        "FAKE-NO-VENDOR-BINARY-HASH-MANIFEST");
+    File.WriteAllText(Path.Combine(prebootSign, "original-amd-driver.inf"),
+        "PRIVATE AMD INF BYTES MUST NEVER ENTER ARCHIVE");
+    File.WriteAllText(Path.Combine(prebootSign, "amd-original.sys"),
+        "PRIVATE AMD KERNEL BYTES MUST NEVER ENTER ARCHIVE");
+    File.WriteAllText(Path.Combine(prebootSign, "M195-private.dll"),
+        "PRIVATE AMD DLL MUST NEVER ENTER ARCHIVE");
+    File.WriteAllText(Path.Combine(prebootSign, "unrelated-personal-note.txt"),
+        "NO PERSONAL FILES");
+    var m195CombinedArchive = await M195PostbootEvidenceExporter.ExportAsync(
+        m195ZipSource, m195ZipTx, Path.Combine(m195ZipRoot, "FullEvidenceReports"),
+        prebootSessionDirectory: prebootRoot);
+    Check(m195CombinedArchive.FilesIncluded == 5 &&
+          m195CombinedArchive.PrebootFilesIncluded == 3 &&
+          File.Exists(m195CombinedArchive.Sha256Sidecar),
+        "one user ZIP combines 3 authentic-format preboot receipts and 2 immutable postboot receipts");
+    using var m195CombinedRead =
+        System.IO.Compression.ZipFile.OpenRead(m195CombinedArchive.ZipFile);
+    Check(m195CombinedRead.Entries.Any(e =>
+            e.FullName == "Preboot/UnsignedCandidate/Evidence/M195-Step8-Transaction.json") &&
+          m195CombinedRead.Entries.Any(e =>
+            e.FullName == "Preboot/UnsignedCandidate/Evidence/M195-Inf2Cat-stdout.txt") &&
+          m195CombinedRead.Entries.Any(e =>
+            e.FullName == "Preboot/OriginalDriverBackup/SHA256SUMS.txt") &&
+          m195CombinedRead.Entries.All(e =>
+            !e.FullName.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.EndsWith(".sys", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.EndsWith(".cat", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) &&
+          !m195CombinedRead.Entries.Any(e =>
+            e.FullName.Contains("personal", StringComparison.OrdinalIgnoreCase)),
+        "final ZIP contains scoped diagnostics but no driver binaries or unrelated user files");
     bool m195ZipRefusesOverwrite = false;
     try { _ = await M195PostbootEvidenceExporter.ExportAsync(
         m195ZipSource, m195ZipTx, m195ZipDest); }
