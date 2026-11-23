@@ -154,4 +154,72 @@ Reject(() => AmdDatReleaseRebuilder.BuildForVerifiedProfile(cleanOriginal, relea
     HandheldProfiles.Go2 with { HardwareId = HandheldProfiles.Go1.HardwareId }),
     "reject spoofed/modified profile object");
 
+
+// M195 source-driven INF clone tests use entirely SYNTHETIC AMD-like sections.
+// No actual AMD or Lenovo source file is checked in.
+string SyntheticOriginalInf(string family)
+{
+    var b = new System.Text.StringBuilder();
+    b.Append("[ATI.Mfg.NTamd64.10.0.1..19044]\r\n");
+    b.Append("\"%EXAMPLE%\" = ati2mtag_Unrelated, PCI\\VEN_FAKE\r\n");
+    b.Append("\r\n[ati2mtag_" + family + "]\r\n");
+    b.Append("FeatureScore=CF\r\n");
+    b.Append("CopyINF = .\\amdcp\\amdcp.inf\r\n");
+    b.Append("CopyINF=amduw23e.inf\r\n\r\n");
+    foreach (string suffix in new[] { ".Services", ".HW", ".Software", ".Components", ".GeneralConfigData" })
+    {
+        b.Append("[ati2mtag_" + family + suffix + "]\r\n");
+        if (suffix != ".Software")
+            b.Append("ExampleOfflineOnly=1\r\n");
+        b.Append("\r\n");
+    }
+    b.Append("[ati2mtag_Another]\r\n");
+    for (int i = 0; i < 9; i++)
+        b.Append("CopyINF = .\\amdcp\\amdcp.inf\r\nCopyINF=amduw23e.inf\r\n");
+    return b.ToString();
+}
+
+foreach (HandheldProfile profile in new[] { HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2 })
+{
+    string policy = string.Join("\r\n",
+        Enumerable.Range(0, profile.ExpectedLenovoPolicyCount)
+            .Select(i => $"HKR,,TestFinesseSetting{i},%REG_DWORD%,{i}")) + "\r\n";
+    string sourceInf = SyntheticOriginalInf(profile.Family);
+    byte[] rebuiltInf = AmdInfSourceRebuilder.BuildProfileInf(
+        System.Text.Encoding.Latin1.GetBytes(sourceInf), profile, policy);
+    string normalizedInf = System.Text.Encoding.Latin1.GetString(rebuiltInf);
+    Check(normalizedInf.Contains($"[{profile.InstallSection}]\r\n", StringComparison.Ordinal) &&
+          normalizedInf.Contains(profile.HardwareId, StringComparison.Ordinal) &&
+          normalizedInf.Contains("AddReg = LegionGo_Finesse_", StringComparison.Ordinal),
+          "clone official-family sections without embedded vendor INF " + profile.Id);
+    Check(normalizedInf.Split(
+        ["CopyINF = .\\amdcp\\amdcp.inf\r\n"], StringSplitOptions.None).Length - 1 == 11 &&
+          normalizedInf.Split(
+        ["CopyINF=amduw23e.inf\r\n"], StringSplitOptions.None).Length - 1 == 11,
+        "copyinf synthetic pre-cleanup exact 11+11 " + profile.Id);
+
+    string closed = AmdInfCopyInfClosure.RemoveVerifiedDependencies(normalizedInf, profile,
+        [new VerifiedCopyInfRemoval("CopyINF = .\\amdcp\\amdcp.inf\r\n", 11),
+         new VerifiedCopyInfRemoval("CopyINF=amduw23e.inf\r\n", 11)]);
+    Check(!closed.Contains("CopyINF = .\\amdcp\\amdcp.inf", StringComparison.Ordinal) &&
+          !closed.Contains("CopyINF=amduw23e.inf", StringComparison.Ordinal) &&
+          closed.Contains("ExampleOfflineOnly=1", StringComparison.Ordinal),
+          "source-driven INF closure preserves unrelated directives " + profile.Id);
+
+    Reject(() => AmdInfSourceRebuilder.BuildProfileInf(
+        System.Text.Encoding.Latin1.GetBytes(sourceInf), profile, policy + "HKR,,Extra,%REG_DWORD%,1\r\n"),
+        "reject unverified Lenovo policy count " + profile.Id);
+    Reject(() => AmdInfSourceRebuilder.BuildProfileInf(
+        System.Text.Encoding.Latin1.GetBytes(sourceInf.Replace(
+            "[ati2mtag_" + profile.Family + ".HW]", "[ati2mtag_missing.HW]",
+            StringComparison.Ordinal)), profile, policy),
+        "reject absent AMD source section " + profile.Id);
+    Reject(() => AmdInfSourceRebuilder.BuildProfileInf(
+        System.Text.Encoding.Latin1.GetBytes(
+            sourceInf.Replace("[ATI.Mfg.NTamd64.10.0.1..19044]\r\n",
+                "[ATI.Mfg.NTamd64.10.0.1..19044]\r\n" +
+                "[ATI.Mfg.NTamd64.10.0.1..19044]\r\n", StringComparison.Ordinal)),
+        profile, policy), "reject duplicate manufacturer anchor " + profile.Id);
+}
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
