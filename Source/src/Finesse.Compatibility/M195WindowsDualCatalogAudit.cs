@@ -20,6 +20,7 @@ public static class M195WindowsDualCatalogAudit
         string EvidenceFile);
 
     public static async Task<Audit> CaptureAsync(
+        M195LifecycleSequence.Device expectedDevice,
         string publishedInf, string preparedCandidateRoot,
         string originalAmdCatalog, string expectedLocalCatalogSha256,
         string verifiedSignToolExe, string freshEvidenceFile,
@@ -27,7 +28,23 @@ public static class M195WindowsDualCatalogAudit
     {
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Catalog audit needs Windows.");
+        ArgumentNullException.ThrowIfNull(expectedDevice);
         ArgumentException.ThrowIfNullOrWhiteSpace(freshEvidenceFile);
+        // M191 examined the active GPU. A staged but UNBOUND OEM INF must not
+        // be reported as installed catalog trust for the selected handheld.
+        var detected = M195WindowsGpuInventory.RequireUniqueExactGpu(
+            await M195WindowsGpuInventory.EnumerateAsync(token));
+        if (detected.Profile != expectedDevice.Profile ||
+            !string.Equals(detected.Display.InstanceId, expectedDevice.InstanceId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(detected.Profile.HardwareId, expectedDevice.ExactHardwareId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(detected.Display.PublishedInf, publishedInf,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(detected.Display.Version,
+                OfficialAmd26111SourceContract.VerifiedFrozenM194.DriverVersion,
+                StringComparison.Ordinal))
+            throw new InvalidDataException("M195_AUDIT_PUBLISHED_INF_NOT_ASSIGNED_TO_TARGET_GPU");
 
         string root = Path.GetFullPath(preparedCandidateRoot);
         string originalCat = Path.GetFullPath(originalAmdCatalog);
@@ -102,6 +119,9 @@ public static class M195WindowsDualCatalogAudit
             Schema = "Finesse.M195.ReadOnly14x4DualTrust.v1",
             CreatedUtc = DateTimeOffset.UtcNow,
             PublishedInf = located.PublishedInf,
+            ActiveGpuInstanceId = detected.Display.InstanceId,
+            ActiveGpuVersion = detected.Display.Version,
+            ActiveGpuProblemCode = detected.Display.ProblemCode,
             DriverStoreInf = located.DriverStoreInfPath,
             DriverStoreRoot = located.DriverStoreRoot,
             OriginalAmdCatSha256 = originalSha,
