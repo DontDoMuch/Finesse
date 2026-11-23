@@ -127,6 +127,24 @@ internal static class M195WindowsPostbootRegistration
         catch (Exception error)
         {
             status = "FAILED_OR_INCOMPLETE_NO_RESTART";
+            // A native Task Scheduler command may succeed then fail during
+            // readback or evidence writing. Do not orphan an elevated logon
+            // task if the preboot transaction is going to abort/recover.
+            bool taskCleanupVerified = false;
+            string? taskCleanupWarning = null;
+            try
+            {
+                await UnregisterVerifiedTaskAsync(new DurableState(
+                    pending, sha, stagedExe, task, sid,
+                    DateTimeOffset.UtcNow.ToString("O"), false),
+                    CancellationToken.None);
+                taskCleanupVerified = true;
+            }
+            catch (Exception cleanupError)
+            {
+                taskCleanupWarning = cleanupError.GetType().Name + ": " +
+                    cleanupError.Message;
+            }
             try
             {
                 await WriteNewAsync(Path.Combine(evidenceFolder,
@@ -135,6 +153,8 @@ internal static class M195WindowsPostbootRegistration
                     Status = status, Failure = error.ToString(),
                     TaskName = task, StateFile = stateFile,
                     RegistrationExitCode = exit,
+                    TaskCleanupVerified = taskCleanupVerified,
+                    TaskCleanupWarning = taskCleanupWarning,
                     TaskStdout = stdout[..Math.Min(stdout.Length, 20000)],
                     TaskStderr = stderr[..Math.Min(stderr.Length, 20000)],
                     RestartRequested = false
