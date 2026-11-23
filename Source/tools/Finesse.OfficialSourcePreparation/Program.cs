@@ -8,10 +8,11 @@ using Finesse.Compatibility;
 /// </summary>
 try
 {
-    if (args.Length != 12)
+    if (args.Length is not (12 or 14))
         throw new ArgumentException(
             "Usage: --installer PATH --extractor PINNED_7ZR_EXE --manifest PUBLIC_194_MANIFEST " +
-            "--lenovo-policy AUTHORIZED_POLICY --profile Go1|GoS|Go2 --output-root NEW_DIRECTORY");
+            "--lenovo-policy AUTHORIZED_POLICY --profile Go1|GoS|Go2 --output-root NEW_DIRECTORY " +
+            "[--inf2cat PINNED_MICROSOFT_INF2CAT_EXE]");
     var argsByName = new Dictionary<string, string>(StringComparer.Ordinal);
     for (int i = 0; i < args.Length; i += 2)
     {
@@ -24,7 +25,7 @@ try
         ? value : throw new ArgumentException("Missing argument: " + name);
     if (argsByName.Keys.Any(key => key is not (
         "--installer" or "--extractor" or "--manifest" or
-        "--lenovo-policy" or "--profile" or "--output-root")))
+        "--lenovo-policy" or "--profile" or "--output-root" or "--inf2cat")))
         throw new ArgumentException("Unrecognized named option.");
 
     HandheldProfile profile = Required("--profile") switch
@@ -59,6 +60,18 @@ try
         Path.Combine(output, "UnsignedCandidate"));
     if (phase2.UnsignedStage.SignedOrInstallable)
         throw new InvalidDataException("UNEXPECTED_INSTALLABLE_PREPARATION_RESULT");
+
+    // Optional offline unsigned catalog generation. Only the exact pinned
+    // Microsoft Inf2Cat is accepted. It still DOES NOT sign or install.
+    if (argsByName.TryGetValue("--inf2cat", out string? inf2cat))
+    {
+        Amd26111UnsignedCatalogGenerator.Result generated =
+            await Amd26111UnsignedCatalogGenerator.GenerateAsync(
+                phase2.UnsignedStage, phase2.Candidate, manifest, inf2cat);
+        Console.WriteLine("UnsignedMainCatalogSHA256=" + generated.Sha256);
+        Console.WriteLine("UnsignedMainCatalogPath=" + generated.UnsignedCatalogPath);
+        Console.WriteLine("UnsignedCatalogHasSigners=" + generated.CatalogContainsSigners);
+    }
 
     Console.WriteLine("M195_SOURCE_FIRST_UNSIGNED_PREPARATION_PASS");
     Console.WriteLine("Profile=" + phase2.Candidate.Profile.Id);
