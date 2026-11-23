@@ -77,6 +77,12 @@ The branch now also includes a 12-step `M195LifecycleSequence` coordinator that 
 
 The public `Amd26111UnsignedCatalogGenerator` revalidates the full 194-file package and invokes only the exact pinned Microsoft WDK Inf2Cat tool. This creates an **unsigned** catalog, not trusted or installable driver output. Detailed dependencies and actual frozen M194 source references are in [M195 lifecycle bridge](docs/M195-LIFECYCLE-BRIDGE.md).
 
+### Native Windows preparation adapter (new M195 implementation)
+
+`M195WindowsPreparationActions` now implements the **real Windows Step 1–7 preparation path** using native SetupAPI/CfgMgr32 detection, recovery package export through `pnputil /export-driver`, authenticated AMD source acquisition/extraction, INF/DAT reconstruction, original 194-file inventory checks and unsigned Inf2Cat generation. The read-only Step 9 preboot PnP observer and M179-style proposed bind identity verifier are also ported.
+
+**The full public GUI is still not connected.** Step 8 signing/binding and Steps 10–12 AMD Software, restart and postboot recovery remain explicitly unimplemented in the concrete adapter. It throws rather than pretending to install a working driver. See [native adapter and hardware compatibility](docs/M195-WINDOWS-NATIVE-ADAPTER.md).
+
 ## Blockers before a genuine public build
 
 1. **Source completeness:** The current repository does not yet include the full compilable Finesse source.
