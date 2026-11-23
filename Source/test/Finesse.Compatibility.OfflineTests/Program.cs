@@ -364,4 +364,51 @@ finally
         Directory.Delete(demoRoot, recursive: true);
 }
 
+
+// Public M194-derived original source metadata only: real 194 paths + SHA-256s.
+// No original AMD package file content is committed or loaded by this test.
+string publicManifest = Path.Combine(Directory.GetCurrentDirectory(),
+    "Source", "contracts", "releases", "amd-26.11.1-original-194.sha256");
+if (!File.Exists(publicManifest))
+    publicManifest = Path.Combine(Directory.GetCurrentDirectory(),
+        "contracts", "releases", "amd-26.11.1-original-194.sha256");
+if (!File.Exists(publicManifest))
+    throw new InvalidOperationException("M195_REQUIRED_PUBLIC_194_FILE_MANIFEST_MISSING");
+string publishedInventoryText = File.ReadAllText(publicManifest);
+AmdVerifiedSourceInventory frozenOriginal =
+    Amd26111SourceInventory.ParsePinned26111(publishedInventoryText);
+Check(frozenOriginal.Entries.Count == 194 &&
+      frozenOriginal.CanonicalSha256 == Amd26111SourceInventory.PinnedOriginalManifestSha256,
+      "published original M194 194-file name/hash manifest matches pinned canonical digest");
+
+foreach (HandheldProfile profile in new[] {
+    HandheldProfiles.Go1, HandheldProfiles.GoS, HandheldProfiles.Go2
+})
+{
+    string candidateInfHash = profile.Id switch
+    {
+        "LegionGo1" => "5F49F240CBDA41F7BD6E30867751507ACF38386B7AA3E0848639BCD002FE691A",
+        "LegionGoS-Z1Extreme" => "E2B0809F3E3D135BFD03F1E0D97D1140BD6A05557024CE1D3EB604DFDAA90071",
+        "LegionGo2-Z2Extreme" => "A355187F07FEEE5A0E0EDCC772A95C68E4F54B04323DE3D45634FFBE447CCBA3",
+        _ => throw new InvalidOperationException("Unsupported fixture profile")
+    };
+    string candidateDatHash = profile.Id == "LegionGo2-Z2Extreme"
+        ? "B63E4F58C164950B41C07071B3CF6797B35ACC597B9476836FCA66E8A658E3FD"
+        : "7986B5DC0CB3C2207ECE857D0060475A603B5342649D146874850C0D4A2509CA";
+    // These records intentionally carry no AMD file bytes: this test proves
+    // hash-list identity only. Rebuilding bytes requires the authentic files.
+    var manifestOnly = new Amd26111CandidateRecipe.VerifiedCandidate(
+        profile, [], [], candidateInfHash, candidateDatHash,
+        Amd26111CandidateRecipe.ReleaseMarker);
+    Check(Amd26111SourceInventory.CandidateManifestSha256(
+              frozenOriginal, manifestOnly) ==
+          Amd26111SourceInventory.PinnedCandidateManifestHash(profile),
+          "published original manifest maps to frozen candidate inventory " + profile.Id);
+}
+Reject(() => Amd26111SourceInventory.ParsePinned26111(
+        publishedInventoryText.Replace(
+            "2E1125EB79359D3BAEB283B81868064257C5F1436D8928AC2EC123837DD70C57  u0206030.inf",
+            new string('0',64) + "  u0206030.inf", StringComparison.Ordinal)),
+    "tampered published AMD original INF SHA cannot pass manifest pin");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
