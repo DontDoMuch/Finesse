@@ -265,10 +265,13 @@ public static class M195LifecycleSequence
         ArgumentNullException.ThrowIfNull(actions);
         progress?.Invoke(Step.VerifyPostboot, "Verifying the GPU after restart");
 
-        // Observation MUST happen before any recovery or further driver mutation.
+        M195PostbootTicketContract.RequireValid(pending);
+        // Capture and persist the FIRST GPU state before any rollback or
+        // mutation. A same-boot logon/task launch cannot authorize recovery.
         var first = await actions.CaptureFirstObservationAsync(pending, token);
-        if (first is null || string.IsNullOrWhiteSpace(first.BootIdentity) ||
-            first.BootIdentity == pending.RegisteredBootIdentity)
+        if (first is null ||
+            !M195PostbootTicketContract.IsNewBoot(
+                pending.RegisteredBootIdentity, first.BootIdentity))
             throw new InvalidDataException("M195_LIFECYCLE_REAL_REBOOT_NOT_CONFIRMED");
 
         bool target = first.ProblemCode == 0 && first.SoftwareInstalled &&
