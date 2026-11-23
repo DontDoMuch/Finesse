@@ -76,16 +76,21 @@ internal static class M195PinnedToolBootstrap
         new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
             "c/bin/10.0.28000.0/x86/Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll",
             "m8-toolchain/extracted-tools/WDK-28000/x86/Microsoft.UniversalStore.HardwareWorkflow.SubmissionBuilder.dll",
-            144_960, "E8D61F87E041C5EF6E10408CABE344457A4607D75997965077810B5862C0B4B7")
+            144_960, "E8D61F87E041C5EF6E10408CABE344457A4607D75997965077810B5862C0B4B7"),
+        new("m8-toolchain/packages/Microsoft.Windows.WDK.x64.10.0.28000.2526.nupkg",
+            "c/bin/10.0.28000.0/x86/WindowsProtectedFiles.xml",
+            "m8-toolchain/extracted-tools/WDK-28000/x86/WindowsProtectedFiles.xml",
+            180_884, "B6DCF5D577C4EB96A63DBA8E8F952CC9A1B6E7C21C6C5784AEC82B261ABEC640")
     ];
 
     internal static IReadOnlyList<Pin> FrozenDownloadPins => Downloads.AsReadOnly();
-    internal static int RequiredPortableInf2CatFiles => Members.Count(
-        item => item.MemberName.StartsWith("c/bin/10.0.28000.0/x86/",
-            StringComparison.Ordinal) && item.MemberName.EndsWith(".dll",
-            StringComparison.OrdinalIgnoreCase) ||
-        item.MemberName.Equals("c/bin/10.0.28000.0/x86/Inf2Cat.exe",
-            StringComparison.OrdinalIgnoreCase));
+    internal static int RequiredPortableInf2CatFiles => Members.Count(item =>
+        item.MemberName.StartsWith("c/bin/10.0.28000.0/x86/",
+            StringComparison.Ordinal) &&
+        (item.MemberName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+         item.MemberName.EndsWith("/Inf2Cat.exe", StringComparison.OrdinalIgnoreCase) ||
+         item.MemberName.EndsWith("/WindowsProtectedFiles.xml",
+             StringComparison.OrdinalIgnoreCase)));
 
     internal static async Task<Tools> EnsureAsync(
         string? cacheRoot, IProgress<string>? progress,
@@ -181,9 +186,10 @@ internal static class M195PinnedToolBootstrap
             !await ExactAsync(Zip26(), Downloads[3].Bytes, Downloads[3].Sha256, token) ||
             !await ExactAsync(Sign(), Members[0].ExactBytes, Members[0].ExactSha256, token))
             throw new InvalidDataException("M195_TOOLCHAIN_FINAL_VERIFICATION_FAILED");
-        // M195 hardware-test discovery, 2026-11-23: Inf2Cat.exe alone exits
-        // -1 with a missing SubmissionBuilder assembly. Require ALL FOUR
-        // companion Microsoft DLLs from the SAME pinned WDK NuGet archive.
+        // M195 hardware-test regression: Inf2Cat.exe alone exits -1 with
+        // missing SubmissionBuilder. With its four DLLs, /driver: still exits
+        // -1 unless WindowsProtectedFiles.xml is adjacent. Pin all SIX
+        // original Microsoft WDK files, not only the executable and DLLs.
         // Old caches containing only Inf2Cat.exe are automatically completed.
         foreach (Member member in Members.Skip(1))
         {
