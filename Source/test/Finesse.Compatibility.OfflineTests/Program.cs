@@ -1691,6 +1691,34 @@ Check(!M195WindowsScopedCleanup.IsScopedInactiveFinesseInf(
     "oem71.inf", "oem3.inf", HandheldProfiles.Go2),
     "M192 Go1 stale package cannot be misclassified as Go2");
 
+
+// Exact functional Lenovo policy rows extracted from the frozen supplied M194
+// three-device inputs. No vendor INF, CAT, DAT or driver binary is embedded.
+foreach (var group in new[] {
+    (Profile: HandheldProfiles.Go1,
+        ExpectedSha: M195FrozenProfileRegistryPolicies.Go1RowsSha256),
+    (Profile: HandheldProfiles.GoS,
+        ExpectedSha: M195FrozenProfileRegistryPolicies.GoSRowsSha256),
+    (Profile: HandheldProfiles.Go2,
+        ExpectedSha: M195FrozenProfileRegistryPolicies.Go2RowsSha256)
+})
+{
+    string policy = M195FrozenProfileRegistryPolicies.RequireAuthorized(group.Profile);
+    Check(policy.Split('\\n').Length == group.Profile.ExpectedLenovoPolicyCount &&
+          Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+              System.Text.Encoding.Latin1.GetBytes(policy))) == group.ExpectedSha,
+        "M194 frozen exact profile HKR rows match independent SHA for " + group.Profile.Id);
+}
+Check(M195PinnedToolBootstrap.FrozenDownloadPins.Count == 4 &&
+      M195PinnedToolBootstrap.FrozenDownloadPins.All(x =>
+          x.Url.StartsWith("https://", StringComparison.Ordinal) &&
+          x.Sha256.Length == 64) &&
+      M195PinnedToolBootstrap.FrozenDownloadPins[0].Sha256 ==
+        Amd26111ArchiveExtraction.Pinned7zrSha256 &&
+      M195PinnedToolBootstrap.FrozenDownloadPins[3].Sha256 ==
+        M195AmdSettings26111.Portable7zipReleaseSha256,
+    "M138/M140 downloader contains exact pinned SDK/WDK and two 7-Zip sources");
+
 Console.WriteLine($"OFFLINE_COMPATIBILITY_TESTS_PASS={passed}");
 
 
