@@ -65,6 +65,30 @@ public static class OfficialAmdInstallerVerifier
             DateTimeOffset.UtcNow);
     }
 
+    /// <summary>
+    /// Read-only native Authenticode diagnostic. Allows the Windows CI runner
+    /// to independently prove WinVerifyTrust works against a known Microsoft
+    /// signed PE, without downloading any AMD executable.
+    /// </summary>
+    public sealed record WindowsSignatureObservation(
+        bool Trusted, int WindowsStatus, string Subject, string Thumbprint);
+
+    public static WindowsSignatureObservation InspectWindowsSignature(
+        string signedFilePath, CancellationToken token = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(signedFilePath);
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("WinVerifyTrust requires Windows.");
+        token.ThrowIfCancellationRequested();
+        string path = Path.GetFullPath(signedFilePath);
+        RejectReparseAncestors(path);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Signed file does not exist.", path);
+        var observed = GetWindowsAuthenticode(path, token);
+        return new WindowsSignatureObservation(observed.Status == 0,
+            observed.Status, observed.Subject, observed.Thumbprint);
+    }
+
     private static async Task<string> HashFileAsync(
         string path, CancellationToken cancellationToken)
     {
@@ -85,7 +109,8 @@ public static class OfficialAmdInstallerVerifier
             filePointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());
             Marshal.StructureToPtr(file, filePointer, false);
             var data = new WinTrustData(filePointer);
-            int status = WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, ref data);
+            Guid actionId = GenericVerifyV2;
+            int status = WinVerifyTrust(IntPtr.Zero, ref actionId, ref data);
             if (status != 0)
                 return (status, string.Empty, string.Empty);
 
@@ -104,7 +129,10 @@ public static class OfficialAmdInstallerVerifier
         finally
         {
             if (filePointer != IntPtr.Zero)
+            {
+                Marshal.DestroyStructure<WinTrustFileInfo>(filePointer);
                 Marshal.FreeHGlobal(filePointer);
+            }
         }
     }
 
@@ -124,7 +152,7 @@ public static class OfficialAmdInstallerVerifier
     }
 
     [DllImport("wintrust.dll", ExactSpelling = true, PreserveSig = true)]
-    private static extern int WinVerifyTrust(IntPtr hwnd, [In] Guid pgActionID,
+    private static extern int WinVerifyTrust(IntPtr hwnd, [In] ref Guid pgActionID,
         ref WinTrustData pWVTData);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -173,7 +201,7 @@ public static class OfficialAmdInstallerVerifier
             dwStateAction = 0;
             hWVTStateData = IntPtr.Zero;
             pwszURLReference = null;
-            dwProvFlags = 0x00000100; // M194 original: revocation check disabled
+            dwProvFlags = 0x00000010; // WTD_REVOCATION_CHECK_NONE (same intended policy as frozen M194)
             dwUIContext = 0;
             pSignatureSettings = IntPtr.Zero;
         }
