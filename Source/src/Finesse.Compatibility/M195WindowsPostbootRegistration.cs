@@ -84,7 +84,7 @@ internal static class M195WindowsPostbootRegistration
             if (!string.Equals(Hash(stagedExe), sha, StringComparison.Ordinal))
                 throw new InvalidDataException("M195_STEP11_STAGED_EXECUTABLE_SHA_MISMATCH");
             var state = new DurableState(pending, sha, stagedExe, task,
-                sid, DateTimeOffset.UtcNow.ToString("O"), true);
+                sid, DateTimeOffset.UtcNow.ToString("O"), false);
             await WriteNewAsync(stateFile, state, token);
             if (!File.Exists(stateFile))
                 throw new InvalidDataException("M195_STEP11_PENDING_TICKET_NOT_DURABLE");
@@ -104,6 +104,12 @@ internal static class M195WindowsPostbootRegistration
             if (exit != 0 ||
                 !stdout.Contains("M195_POSTBOOT_TASK_VERIFIED=", StringComparison.Ordinal))
                 throw new InvalidDataException("M195_STEP11_TASK_NOT_VERIFIED");
+            // The staging receipt cannot claim a verified task before the
+            // actual native scheduler readback. Promote only after success.
+            string confirmed = stateFile + ".confirmed";
+            await WriteNewAsync(confirmed, state with { TaskReadbackVerified = true },
+                CancellationToken.None);
+            File.Move(confirmed, stateFile, overwrite: true);
             status = "REGISTERED_PENDING_SINGLE_RESTART";
             await WriteNewAsync(receiptFile, new {
                 Schema = "Finesse.M195.Step11Registration.v1",
