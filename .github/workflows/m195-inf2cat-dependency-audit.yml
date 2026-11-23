@@ -85,3 +85,60 @@ jobs:
           dotnet run --project 'Source/test/Finesse.Compatibility.OfflineTests/Finesse.Compatibility.OfflineTests.csproj' --configuration Release -- --pinned-tool-runtime-probe
           if ($LASTEXITCODE -ne 0) { throw "Finesse full portable bootstrap failed: $LASTEXITCODE" }
           Write-Host 'M195_CLEAN_WINDOWS_REAL_BOOTSTRAP_SMOKE_PASS'
+      - name: Exercise actual portable Inf2Cat on a synthetic non-installing INF package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = Join-Path $env:RUNNER_TEMP 'M195-Inf2Cat-Fixture'
+          New-Item -ItemType Directory -Path $path -Force | Out-Null
+          $inf = @'
+          [Version]
+          Signature="$Windows NT$"
+          Class=Sample
+          ClassGuid={78A1C341-4539-11d3-B88D-00C04FAD5171}
+          Provider=%Manufacturer%
+          DriverVer=11/20/2026,1.0.0.0
+          CatalogFile=finesseprobe.cat
+          [Manufacturer]
+          %Manufacturer%=Models,NTamd64
+          [Models.NTamd64]
+          %Device%=Install,ROOT\FINESSE_CATALOG_PROBE
+          [Install.NT]
+          CopyFiles=CopyProbe
+          [CopyProbe]
+          probe.txt
+          [SourceDisksNames]
+          1=%Disk%,,,
+          [SourceDisksFiles]
+          probe.txt=1
+          [DestinationDirs]
+          CopyProbe=12
+          [Strings]
+          Manufacturer="Finesse Synthetic Tests"
+          Device="Noninstalling Inf2Cat Fixture"
+          Disk="Fixture Disk"
+          '@
+          Set-Content -LiteralPath (Join-Path $path 'finesseprobe.inf') -Value $inf -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $path 'probe.txt') -Value 'synthetic only' -Encoding ascii
+          $inf2cat = Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\extracted-tools\WDK-28000\x86\Inf2Cat.exe'
+          $output = & $inf2cat "/driver:$path" '/os:10_GE_X64' '/verbose' 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host "M195_INF2CAT_SYNTHETIC_EXIT=$exit"
+          Write-Host $output
+          if ($exit -ne 0 -or -not (Test-Path (Join-Path $path 'finesseprobe.cat'))) {
+            throw 'Full pinned Inf2Cat could not create a catalog from synthetic INF'
+          }
+          Write-Host 'M195_PINNED_INF2CAT_SYNTHETIC_CATALOG_PASS'
+      - name: Probe pinned Windows SignTool help on the same clean runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tool = Join-Path $env:LOCALAPPDATA 'Finesse\portable-cache\m8-toolchain\extracted-tools\SDK-28000\x64\signtool.exe'
+          $out = & $tool '/?' 2>&1 | Out-String
+          $exit = $LASTEXITCODE
+          Write-Host "M195_PINNED_SIGNTOOL_HELP_EXIT=$exit"
+          Write-Host ($out.Substring(0,[Math]::Min(1200,$out.Length)))
+          if ($exit -ne 0 -or $out -match 'Could not load file or assembly|The code execution cannot proceed') {
+            throw 'Pinned portable SignTool missing a runtime dependency'
+          }
+          Write-Host 'M195_PINNED_SIGNTOOL_HELP_PASS'
